@@ -1,0 +1,36 @@
+name: Docker Build Reusable Workflow
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        required: true
+        type: string
+      dockerfile_path:
+        required: false
+        type: string
+        default: './Dockerfile'
+      context:
+        required: false
+        type: string
+        default: '.'
+      build_args:
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  docker_build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout app repo
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          echo "Building Docker image: ${{ inputs.image_name }}"
+          docker build \
+            -t ${{ inputs.image_name }} \
+            -f ${{ inputs.dockerfile_path }} \
+            ${{ inputs.build_args }} \
+            ${{ inputs.context }}
