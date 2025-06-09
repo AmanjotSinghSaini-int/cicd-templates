@@ -1,4 +1,4 @@
-name: Reusable Docker Build
+name: Docker Build Reusable Workflow
 
 on:
   workflow_call:
@@ -9,28 +9,28 @@ on:
       dockerfile_path:
         required: false
         type: string
-        default: ./Dockerfile
+        default: './Dockerfile'
+      context:
+        required: false
+        type: string
+        default: '.'
+      build_args:
+        required: false
+        type: string
+        default: ''
 
 jobs:
-  docker-build:
+  docker_build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout source
+      - name: Checkout app repo
         uses: actions/checkout@v4
 
-      - name: 🔍 Pre-Build: Dockerfile Linting
+      - name: Build Docker image
         run: |
-          echo "Running Hadolint on ${{ inputs.dockerfile_path }}"
-          docker run --rm -i hadolint/hadolint < "${{ inputs.dockerfile_path }}"
-
-      - name: 🐳 Build Docker Image
-        run: |
-          echo "Building image: ${{ inputs.image_name }}"
-          docker build -t ${{ inputs.image_name }} .
-
-      # Optional: Push the image (if needed)
-      # - name: 🐙 Push to GHCR
-      #   run: |
-      #     echo "Pushing to registry..."
-      #     docker push ${{ inputs.image_name }}
+          echo "Building Docker image: ${{ inputs.image_name }}"
+          docker build \
+            -t ${{ inputs.image_name }} \
+            -f ${{ inputs.dockerfile_path }} \
+            ${{ inputs.build_args }} \
+            ${{ inputs.context }}
