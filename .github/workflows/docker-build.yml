@@ -35,16 +35,19 @@ jobs:
             ${{ inputs.build_args }} \
             ${{ inputs.context }}
 
-      - name: 🔍 Scan image with Trivy and generate report
+      - name: 🔍 Dockerized Trivy scan and generate report
         run: |
-          echo "📦 Scanning image with Trivy"
+          echo "🐳 Running Trivy inside Docker"
           mkdir -p trivy-reports
-          trivy image \
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v ${{ github.workspace }}/trivy-reports:/output \
+            aquasec/trivy:latest \
+            image ${{ inputs.image_name }} \
             --format table \
             --ignore-unfixed \
             --vuln-type os,library \
-            -o trivy-reports/trivy-report.txt \
-            ${{ inputs.image_name }}
+            -o /output/trivy-report.txt
 
       - name: 📤 Upload Trivy Report
         uses: actions/upload-artifact@v4
