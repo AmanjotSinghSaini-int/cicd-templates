@@ -35,10 +35,19 @@ jobs:
             ${{ inputs.build_args }} \
             ${{ inputs.context }}
 
-      - name: 🔍 Scan image with Trivy
-        uses: aquasecurity/trivy-action@master
+      - name: 🔍 Scan image with Trivy and generate report
+        run: |
+          echo "📦 Scanning image with Trivy"
+          mkdir -p trivy-reports
+          trivy image \
+            --format table \
+            --ignore-unfixed \
+            --vuln-type os,library \
+            -o trivy-reports/trivy-report.txt \
+            ${{ inputs.image_name }}
+
+      - name: 📤 Upload Trivy Report
+        uses: actions/upload-artifact@v4
         with:
-          image-ref: ${{ inputs.image_name }}
-          format: table
-          ignore-unfixed: true
-          vuln-type: 'os,library'
+          name: trivy-report
+          path: trivy-reports/trivy-report.txt
