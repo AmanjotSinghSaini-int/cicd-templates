@@ -54,3 +54,21 @@ jobs:
         with:
           name: trivy-report
           path: trivy-reports/trivy-report.txt
+
+      - name: 🔐 Dockerized Gitleaks scan and generate report
+        run: |
+          echo "🔍 Running Gitleaks inside Docker"
+          mkdir -p gitleaks-reports
+          docker run --rm \
+            -v ${{ github.workspace }}:/repo \
+            -v ${{ github.workspace }}/gitleaks-reports:/output \
+            zricethezav/gitleaks:latest detect \
+            --source="/repo" \
+            --report-format="json" \
+            --report-path="/output/gitleaks-report.json"
+
+      - name: 📤 Upload Gitleaks Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks-reports/gitleaks-report.json
