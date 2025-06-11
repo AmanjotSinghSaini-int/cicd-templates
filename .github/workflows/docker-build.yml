@@ -72,3 +72,23 @@ jobs:
         with:
           name: gitleaks-report
           path: gitleaks-reports/gitleaks-report.json
+
+      - name: 🛡️ OWASP Dependency Check scan
+        run: |
+          echo "🔍 Running OWASP Dependency Check"
+          mkdir -p dependency-check-reports
+          docker run --rm \
+            -v ${{ github.workspace }}:/src \
+            -v ${{ github.workspace }}/dependency-check-reports:/report \
+            owasp/dependency-check:latest \
+            --project "MyProject" \
+            --scan /src \
+            --format JSON \
+            --out /report
+
+      - name: 📤 Upload OWASP Dependency Check Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: dependency-check-reports/dependency-check-report.json
+
