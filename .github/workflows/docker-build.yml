@@ -73,18 +73,35 @@ jobs:
           name: gitleaks-report
           path: gitleaks-reports/gitleaks-report.json
 
-      - name:  OWASP Dependency Check
+      - name: 🚦 OWASP Dependency Check
+        # This step runs the OWASP Dependency Check tool in a Docker container
+        # to scan your project's dependencies for known vulnerabilities.
         run: |
+          echo "Checking dependencies with OWASP Dependency Check..."
           mkdir -p dependency-check-report
+          # Create a directory for the ODC data cache (vulnerability databases)
+          # This helps with persistence across runs and ensures write permissions.
+          mkdir -p ${{ github.workspace }}/.owasp-data-cache
+
           docker run --rm \
             --volume "${{ github.workspace }}:/src" \
             --volume "${{ github.workspace }}/dependency-check-report:/report" \
+            # Mount a dedicated volume for ODC's data directory.
+            # The path inside the container must match ODC's expected data location,
+            # which is typically /usr/share/dependency-check/data for the official image.
+            --volume "${{ github.workspace }}/.owasp-data-cache:/usr/share/dependency-check/data" \
             owasp/dependency-check:latest \
             --project "MyProject" \
             --scan /src \
             --format "ALL" \
             --out /report \
+            # Explicitly tell ODC where its data directory is located inside the container.
+            --data "/usr/share/dependency-check/data" \
+            # Enable debug logging for more detailed error messages. This will be crucial for debugging.
+            --debug \
+            # Disables failing the scan based on CVSS scores. Remove this for stricter checks later.
             --disableFailOnCVSS
+
 
       - name:  Upload OWASP Dependency Check Reports
         uses: actions/upload-artifact@v4
