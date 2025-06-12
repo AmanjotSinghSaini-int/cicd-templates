@@ -95,8 +95,6 @@ jobs:
             --out /report \
             --enableExperimental \
             --path /src/requirements.txt
-            --enableExperimental \
-            --disableFailOnCVSS
 
       - name:  Upload OWASP Dependency Check Report
         uses: actions/upload-artifact@v4
