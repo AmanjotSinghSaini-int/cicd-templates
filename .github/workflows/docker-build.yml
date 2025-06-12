@@ -89,6 +89,7 @@ jobs:
             --out /report \
             --disableFailOnCVSS \
             --log /report/debug.log || true
+            --debug \
 
       - name:  Upload OWASP Dependency Check Report
         uses: actions/upload-artifact@v4
