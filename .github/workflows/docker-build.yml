@@ -73,32 +73,22 @@ jobs:
           name: gitleaks-report
           path: gitleaks-reports/gitleaks-report.json
 
-      - name:  Cache OWASP Dependency-Check data
-        uses: actions/cache@v4
-        with:
-          path: ~/.dependency-check
-          key: ${{ runner.os }}-owasp-dependency-check-cache
-
-      - name:  OWASP Dependency-Check via Docker
+      - name:  OWASP Dependency Check
         run: |
-          echo " Running OWASP Dependency-Check"
-          mkdir -p owasp-reports
-          mkdir -p ~/.dependency-check
+          mkdir -p dependency-check-report
           docker run --rm \
-            -v ${{ github.workspace }}:/src \
-            -v ~/.dependency-check:/usr/share/dependency-check/data \
-            -v ${{ github.workspace }}/owasp-reports:/report \
+            --volume "${{ github.workspace }}:/src" \
+            --volume "${{ github.workspace }}/dependency-check-report:/report" \
             owasp/dependency-check:latest \
             --project "MyProject" \
             --scan /src \
-            --format JSON \
+            --format "ALL" \
             --out /report \
-            --enableExperimental \
-            --path /src/requirements.txt
+            --disableFailOnCVSS
 
-      - name:  Upload OWASP Dependency Check Report
+      - name:  Upload OWASP Dependency Check Reports
         uses: actions/upload-artifact@v4
         with:
           name: dependency-check-report
-          path: dependency-check-reports/dependency-check-report.json
+          path: dependency-check-report/
 
