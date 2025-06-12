@@ -73,23 +73,18 @@ jobs:
           name: gitleaks-report
           path: gitleaks-reports/gitleaks-report.json
 
-      - name: 🛡️ OWASP Dependency Check scan
+      - name:  OWASP Dependency Check scan
         run: |
-          echo "🛡️ Running OWASP Dependency Check"
+          echo " Running OWASP Dependency Check"
           mkdir -p dependency-check-reports
-          chmod -R 777 dependency-check-reports
           docker run --rm \
-            -u $(id -u):$(id -g) \  
             -v ${{ github.workspace }}:/src \
             -v ${{ github.workspace }}/dependency-check-reports:/report \
             owasp/dependency-check:latest \
             --project "MyProject" \
             --scan /src \
             --format "ALL" \
-            --out /report \
-            --disableFailOnCVSS \
-            --log /report/debug.log || true
-            --debug \
+            --out /report
 
       - name:  Upload OWASP Dependency Check Report
         uses: actions/upload-artifact@v4
