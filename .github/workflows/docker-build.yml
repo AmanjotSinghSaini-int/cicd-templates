@@ -82,7 +82,7 @@ jobs:
           format: "HTML"  
           out: "dependency-check-reports"
           args: >
-            --failOnCVSS 11
+            --failOnCVSS 3
 
       - name: 📤 Upload OWASP Dependency Check Report
         uses: actions/upload-artifact@v4
