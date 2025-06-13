@@ -100,6 +100,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: 🔍 Run pip-audit
+        run: |
+          pip install pip-audit
+          mkdir -p pip-audit-reports
+          pip-audit -r requirements.txt -f json -o pip-audit-reports/pip-audit-report.json
+
 
       - name: Run OWASP Dependency Check (with caching)
         if: ${{ inputs.run_owasp }}
