@@ -75,7 +75,7 @@ jobs:
           path: gitleaks-reports/gitleaks-report.json
 
       - name: 🛡️ Run OWASP Dependency Check (with caching)
-        uses: dependency-check/Dependency-Check_Action@v3.0.0
+        uses: dependency-check/Dependency-Check_Action@main
         with:
           project: "MyProject"
           path: "."
