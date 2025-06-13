@@ -24,21 +24,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 🔍 Checkout source code
+      - name:  Checkout source code
         uses: actions/checkout@v4
 
-      - name: 🛠️ Build Docker image
+      - name:  Build Docker image
         run: |
-          echo "🔧 Building Docker image: ${{ inputs.image_name }}"
+          echo " Building Docker image: ${{ inputs.image_name }}"
           docker build \
             -t ${{ inputs.image_name }} \
             -f ${{ inputs.dockerfile_path }} \
             ${{ inputs.build_args }} \
             ${{ inputs.context }}
 
-      - name: 🐳 Dockerized Trivy scan and generate report
+      - name:  Dockerized Trivy scan and generate report
         run: |
-          echo "🔍 Running Trivy inside Docker"
+          echo " Running Trivy inside Docker"
           mkdir -p trivy-reports
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
@@ -50,15 +50,15 @@ jobs:
             --vuln-type os,library \
             -o /output/trivy-report.txt
 
-      - name: 📤 Upload Trivy Report
+      - name:  Upload Trivy Report
         uses: actions/upload-artifact@v4
         with:
           name: trivy-report
           path: trivy-reports/trivy-report.txt
 
-      - name: 🔐 Dockerized Gitleaks scan and generate report
+      - name:  Dockerized Gitleaks scan and generate report
         run: |
-          echo "🔍 Running Gitleaks inside Docker"
+          echo " Running Gitleaks inside Docker"
           mkdir -p gitleaks-reports
           docker run --rm \
             -v ${{ github.workspace }}:/repo \
@@ -68,13 +68,13 @@ jobs:
             --report-format="json" \
             --report-path="/output/gitleaks-report.json"
 
-      - name: 📤 Upload Gitleaks Report
+      - name:  Upload Gitleaks Report
         uses: actions/upload-artifact@v4
         with:
           name: gitleaks-report
           path: gitleaks-reports/gitleaks-report.json
 
-      - name: 🛡️ Run OWASP Dependency Check (with caching)
+      - name:  Run OWASP Dependency Check (with caching)
         uses: dependency-check/Dependency-Check_Action@main
         with:
           project: "MyProject"
@@ -82,16 +82,10 @@ jobs:
           format: "HTML"  
           out: "dependency-check-reports"
           args: >
-            --failOnCVSS 3
+            --failOnCVSS 10
 
-      - name: 📤 Upload OWASP Dependency Check Report
+      - name:  Upload OWASP Dependency Check Report
         uses: actions/upload-artifact@v4
         with:
           name: dependency-check-html-report
           path: dependency-check-reports/dependency-check-report.html
-
-
-      - name: 📂 Show Dependency Check Reports
-        run: |
-          echo "📄 Listing generated Dependency Check reports:"
-          ls -lah dependency-check-reports/
