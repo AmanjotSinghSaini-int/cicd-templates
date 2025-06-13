@@ -90,6 +90,17 @@ jobs:
           name: gitleaks-report
           path: gitleaks-reports/gitleaks-report.json
 
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+
       - name: Run OWASP Dependency Check (with caching)
         if: ${{ inputs.run_owasp }}
         uses: dependency-check/Dependency-Check_Action@main
