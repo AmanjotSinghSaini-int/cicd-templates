@@ -22,6 +22,7 @@ on:
 jobs:
   docker_build:
     runs-on: ubuntu-latest
+
     steps:
       - name: 🔍 Checkout source code
         uses: actions/checkout@v4
@@ -73,19 +74,24 @@ jobs:
           name: gitleaks-report
           path: gitleaks-reports/gitleaks-report.json
 
-      - name: 🛡️ Run OWASP Dependency Check and save reports
-        run: |
-          echo "🛡️ Running OWASP Dependency Check"
-          mkdir -p dependency-check-reports
-          docker run --rm \
-            -v ${{ github.workspace }}:/src \
-            -v ${{ github.workspace }}/dependency-check-reports:/report \
-            owasp/dependency-check:latest \
-            --project "MyProject" \
-            --scan /src \
-            --format "ALL" \
-            --out /report
+      - name: 🛡️ Run OWASP Dependency Check (with caching)
+        uses: dependency-check/Dependency-Check_Action@v3.0.2
+        with:
+          project: "MyProject"
+          path: "."
+          format: "HTML"  
+          out: "dependency-check-reports"
+          args: >
+            --disableFailOnCVSS
 
-          echo "📁 Reports saved to dependency-check-reports/"
-          echo "📄 Contents:"
+      - name: 📤 Upload OWASP Dependency Check Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-html-report
+          path: dependency-check-reports/dependency-check-report.html
+
+
+      - name: 📂 Show Dependency Check Reports
+        run: |
+          echo "📄 Listing generated Dependency Check reports:"
           ls -lah dependency-check-reports/
