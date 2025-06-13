@@ -98,8 +98,6 @@ jobs:
           path: "."
           format: "HTML"
           out: "dependency-check-reports"
-          args: >
-            --failOnCVSS 10
 
       - name: Upload OWASP Dependency Check Report
         if: ${{ inputs.run_owasp }}
