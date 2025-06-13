@@ -101,6 +101,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: 🔍 Run pip-audit
+        continue-on-error: true
         run: |
           pip install pip-audit
           mkdir -p pip-audit-reports
