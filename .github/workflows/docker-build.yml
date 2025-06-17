@@ -95,9 +95,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: 📦 Install Python dependencies
+      - name: 📦 Install Python Dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: 🔍 Run pip-audit
@@ -115,22 +117,19 @@ jobs:
           cyclonedx-py requirements --output-file bom.json
 
 
-      - name: 📦 Run OWASP Dependency Check
+      - name: 🔍 Run OWASP Dependency Check
         uses: dependency-check/Dependency-Check_Action@main
         with:
-          project: "your-python-project"
-          scan: "./" 
+          project: "python-project"
+          scan: "./venv/lib/python3.11/site-packages"
           format: "HTML"
-          out: "reports"
+          out: "odc-reports"
           args: >
             --enableExperimental
             --enableRetired
-            --failOnCVSS 0
             --log odc.log
             --data ./odc-data
-            --python
-            --scan ./requirements.txt
-
+      
       - name: Upload OWASP Dependency Check Report
         if: ${{ inputs.run_owasp }}
         uses: actions/upload-artifact@v4
