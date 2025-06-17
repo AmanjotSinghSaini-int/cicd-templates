@@ -115,15 +115,21 @@ jobs:
           cyclonedx-py requirements --output-file bom.json
 
 
-      - name: 🛡️ Run OWASP Dependency Check on SBOM
-        if: ${{ inputs.run_owasp }}
+      - name: 📦 Run OWASP Dependency Check
         uses: dependency-check/Dependency-Check_Action@main
         with:
-          project: "MyProject"
-          scan: "bom.json"
+          project: "your-python-project"
+          scan: "./" 
           format: "HTML"
-          out: "dependency-check-reports"
-          args: --noupdate
+          out: "reports"
+          args: >
+            --enableExperimental
+            --enableRetired
+            --failOnCVSS 0
+            --log odc.log
+            --data ./odc-data
+            --python
+            --scan ./requirements.txt
 
       - name: Upload OWASP Dependency Check Report
         if: ${{ inputs.run_owasp }}
