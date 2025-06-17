@@ -48,7 +48,7 @@ jobs:
             ${{ inputs.build_args }} \
             ${{ inputs.context }}
 
-      - name: Dockerized Trivy scan and generate report
+      - name: Dockerized Trivy scan and generate HTML report
         if: ${{ inputs.run_trivy }}
         run: |
           echo "Running Trivy inside Docker"
@@ -58,17 +58,18 @@ jobs:
             -v ${{ github.workspace }}/trivy-reports:/output \
             aquasec/trivy:latest \
             image ${{ inputs.image_name }} \
-            --format table \
+            --format html \
             --ignore-unfixed \
             --vuln-type os,library \
-            -o /output/trivy-report.txt
+            -o /output/trivy-report.html
 
-      - name: Upload Trivy Report
+      - name: Upload Trivy HTML Report
         if: ${{ inputs.run_trivy }}
         uses: actions/upload-artifact@v4
         with:
           name: trivy-report
-          path: trivy-reports/trivy-report.txt
+          path: trivy-reports/trivy-report.html
+
 
       - name: Dockerized Gitleaks scan and generate report
         if: ${{ inputs.run_gitleaks }}
