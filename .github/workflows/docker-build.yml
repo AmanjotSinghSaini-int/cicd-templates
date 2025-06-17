@@ -107,15 +107,21 @@ jobs:
           mkdir -p pip-audit-reports
           pip-audit -r requirements.txt -f json -o pip-audit-reports/pip-audit-report.json
 
-
-      - name: Run OWASP Dependency Check (with caching)
+      - name: Run OWASP Dependency Check
         if: ${{ inputs.run_owasp }}
-        uses: dependency-check/Dependency-Check_Action@main
-        with:
-          project: "MyProject"
-          path: "."
-          format: "HTML"
-          out: "dependency-check-reports"
+        run: |
+          echo "Running OWASP Dependency-Check inside Docker"
+          mkdir -p dependency-check-reports
+          docker run --rm \
+            -v ${{ github.workspace }}:/github/workspace \
+            -v ${{ github.workspace }}/dependency-check-reports:/output \
+            owasp/dependency-check:latest \
+            --project MyProject \
+            --scan /github/workspace/. \
+            --format HTML \
+            --out /output \
+            --log /output/dependency-check.log \
+            --debug
 
       - name: Upload OWASP Dependency Check Report
         if: ${{ inputs.run_owasp }}
@@ -123,3 +129,10 @@ jobs:
         with:
           name: dependency-check-html-report
           path: dependency-check-reports/dependency-check-report.html
+
+      - name: Upload OWASP Dependency Check Log
+        if: ${{ inputs.run_owasp }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-log
+          path: dependency-check-reports/dependency-check.log
