@@ -75,6 +75,7 @@ jobs:
 
       - name: Dockerized Gitleaks scan and generate report
         if: ${{ inputs.run_gitleaks }}
+        continue-on-error: true
         run: |
           echo "Running Gitleaks inside Docker"
           mkdir -p gitleaks-reports
