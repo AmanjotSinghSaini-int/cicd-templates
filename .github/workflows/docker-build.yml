@@ -118,7 +118,7 @@ jobs:
 
       - name: Run OWASP Dependency Check
         if: ${{ inputs.run_owasp }}
-        uses: dependency-check/Dependency-Check-Action@v0.5.0
+        uses: dependency-check/Dependency-Check-Action@main
         with:
           project: "MyProject"
           path: "."
