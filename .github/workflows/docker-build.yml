@@ -95,11 +95,9 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: 📦 Install Python Dependencies
+      - name: 📦 Install Python dependencies
         run: |
-          python -m venv venv
-          source venv/bin/activate
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: 🔍 Run pip-audit
@@ -110,26 +108,15 @@ jobs:
           pip-audit -r requirements.txt -f json -o pip-audit-reports/pip-audit-report.json
 
 
-      - name: 📄 Generate SBOM using CycloneDX
+      - name: Run OWASP Dependency Check (with caching)
         if: ${{ inputs.run_owasp }}
-        run: |
-          pip install cyclonedx-bom
-          cyclonedx-py requirements --output-file bom.json
-
-
-      - name: 🔍 Run OWASP Dependency Check
         uses: dependency-check/Dependency-Check_Action@main
         with:
-          project: "python-project"
-          scan: "./venv/lib/python3.11/site-packages"
+          project: "MyProject"
+          path: "."
           format: "HTML"
-          out: "odc-reports"
-          args: >
-            --enableExperimental
-            --enableRetired
-            --log odc.log
-            --data ./odc-data
-      
+          out: "dependency-check-reports"
+
       - name: Upload OWASP Dependency Check Report
         if: ${{ inputs.run_owasp }}
         uses: actions/upload-artifact@v4
