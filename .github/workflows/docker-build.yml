@@ -108,14 +108,21 @@ jobs:
           pip-audit -r requirements.txt -f json -o pip-audit-reports/pip-audit-report.json
 
 
-      - name: Run OWASP Dependency Check (with caching)
+      - name: 📄 Generate SBOM using CycloneDX
+        if: ${{ inputs.run_owasp }}
+        run: |
+          pip install cyclonedx-bom
+          cyclonedx-py -r -o bom.json
+
+      - name: 🛡️ Run OWASP Dependency Check on SBOM
         if: ${{ inputs.run_owasp }}
         uses: dependency-check/Dependency-Check_Action@main
         with:
           project: "MyProject"
-          path: "."
+          scan: "bom.json"
           format: "HTML"
           out: "dependency-check-reports"
+          args: --noupdate
 
       - name: Upload OWASP Dependency Check Report
         if: ${{ inputs.run_owasp }}
