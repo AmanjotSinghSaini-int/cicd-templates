@@ -107,15 +107,29 @@ jobs:
           mkdir -p pip-audit-reports
           pip-audit -r requirements.txt -f json -o pip-audit-reports/pip-audit-report.json
 
+      - name: Debug requirements.txt
+        run: |
+          echo "Contents of requirements.txt:"
+          cat requirements.txt || echo "requirements.txt not found"
 
-      - name: Run OWASP Dependency Check (with caching)
+      - name: Test NVD Connectivity
+        run: |
+          curl -I https://nvd.nist.gov || echo "Failed to connect to NVD"
+
+      - name: Run OWASP Dependency Check
         if: ${{ inputs.run_owasp }}
-        uses: dependency-check/Dependency-Check_Action@main
+        uses: dependency-check/Dependency-Check_Action@v0.6.0
         with:
           project: "MyProject"
           path: "."
           format: "HTML"
           out: "dependency-check-reports"
+          args: --project MyProject --scan . --format HTML --out dependency-check-reports --log dependency-check.log --debug
+
+      - name: Debug Dependency-Check Cache
+        if: ${{ inputs.run_owasp }}
+        run: |
+          ls -lh ~/.owasp/dependency-check/data/ || echo "Cache directory not found"
 
       - name: Upload OWASP Dependency Check Report
         if: ${{ inputs.run_owasp }}
@@ -123,3 +137,10 @@ jobs:
         with:
           name: dependency-check-html-report
           path: dependency-check-reports/dependency-check-report.html
+
+      - name: Upload OWASP Dependency Check Log
+        if: ${{ inputs.run_owasp }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-log
+          path: dependency-check-reports/dependency-check.log
