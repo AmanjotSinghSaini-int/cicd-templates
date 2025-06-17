@@ -112,7 +112,8 @@ jobs:
         if: ${{ inputs.run_owasp }}
         run: |
           pip install cyclonedx-bom
-          cyclonedx-py -r -o bom.json
+          cyclonedx-py requirements --output-file bom.json
+
 
       - name: 🛡️ Run OWASP Dependency Check on SBOM
         if: ${{ inputs.run_owasp }}
