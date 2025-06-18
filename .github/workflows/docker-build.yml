@@ -26,6 +26,10 @@ on:
         required: false
         type: boolean
         default: true
+      continue_on_gitleaks_error:
+        required: false
+        type: boolean
+        default: true
       run_owasp:
         required: false
         type: boolean
@@ -75,7 +79,7 @@ jobs:
 
       - name: Dockerized Gitleaks scan and generate report
         if: ${{ inputs.run_gitleaks }}
-        continue-on-error: true
+        continue-on-error: ${{ inputs.continue_on_gitleaks_error }}
         run: |
           echo "Running Gitleaks inside Docker"
           mkdir -p gitleaks-reports
