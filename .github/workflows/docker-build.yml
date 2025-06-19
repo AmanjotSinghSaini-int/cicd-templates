@@ -128,7 +128,7 @@ jobs:
 
       - name:  Send Slack Notification
         uses: act10ns/slack@v1
-        if: always()
+        if: always() 
         with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
           status: ${{ job.status }}
-          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
