@@ -132,3 +132,4 @@ jobs:
         with:
           webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
           status: ${{ job.status }}
+          channel: '#github-actions-notification'
