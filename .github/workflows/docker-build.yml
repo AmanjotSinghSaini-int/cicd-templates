@@ -126,8 +126,8 @@ jobs:
           path: dependency-check-reports/dependency-check-report.html
 
       - name: Send Slack Notification # Corrected indentation for this step
+        if: always()
         uses: act10ns/slack@v1
-        if: ${{ always() }}
         with:
           webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
           status: ${{ job.status }}
