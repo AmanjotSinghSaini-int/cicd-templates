@@ -22,7 +22,7 @@ on:
         required: false
         type: boolean
         default: true
-      continue_on_trivy_error: 
+      continue_on_trivy_error:
         required: false
         type: boolean
         default: true
@@ -107,7 +107,6 @@ jobs:
           name: gitleaks-report
           path: gitleaks-reports/gitleaks-report.json
 
-      
 
       - name: Run OWASP Dependency Check (with caching)
         if: ${{ inputs.run_owasp }}
@@ -126,9 +125,9 @@ jobs:
           name: dependency-check-html-report
           path: dependency-check-reports/dependency-check-report.html
 
-      - name:  Send Slack Notification
+      - name: Send Slack Notification # Corrected indentation for this step
         uses: act10ns/slack@v1
-        if: always() 
+        if: always()
         with:
           webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
           status: ${{ job.status }}
