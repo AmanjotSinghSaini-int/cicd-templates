@@ -46,8 +46,6 @@ on:
 jobs:
   docker_build:
     runs-on: ubuntu-latest
-    env:
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL}}
 
     steps:
       - name: Checkout source code
@@ -134,5 +132,7 @@ jobs:
           status: ${{ job.status }}
           steps: ${{ toJson(steps) }}
           channel: '#github-actions-notification'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL}}
         if: always()
        
