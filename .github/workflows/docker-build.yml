@@ -125,3 +125,12 @@ jobs:
         with:
           name: dependency-check-html-report
           path: dependency-check-reports/dependency-check-report.html
+
+      - name: 📣 Send Slack Notification
+        uses: act10ns/slack@v1
+        if: always() 
+        with:
+          status: ${{ job.status }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
