@@ -133,6 +133,7 @@ jobs:
       - name: Slack Notification
         uses: act10ns/slack@v1
         with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}  # Will work now!
-          status: ${{ job.status }}
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
           channel: '#github-actions-notification'
+          status: ${{ job.status }}
+          steps: ${{ toJson(steps) }}
