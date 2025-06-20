@@ -125,10 +125,30 @@ jobs:
           name: dependency-check-html-report
           path: dependency-check-reports/dependency-check-report.html
 
-      - name: Fallback Slack Notification
+      - name: Validate and Send Slack Notification
         if: always()
+        env:
+          WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+          STATUS: ${{ job.status }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
         run: |
+          # Validate URL exists
+          if [ -z "$WEBHOOK" ]; then
+            echo "::error::SLACK_WEBHOOK_URL secret is empty"
+            exit 1
+          fi
+
+          # Validate URL format
+          if [[ ! "$WEBHOOK" =~ ^https://hooks\.slack\.com/services/ ]]; then
+            echo "::error::Invalid Slack webhook format"
+            echo "Expected: https://hooks.slack.com/services/TXXXXXX/BXXXXXX/XXXXXX"
+            echo "Got: ${WEBHOOK:0:50}..."
+            exit 1
+          fi
+
+          # Send notification
           curl -X POST \
             -H 'Content-type: application/json' \
-            --data '{"text":"Build ${{ job.status }} for ${{ inputs.image_name }}"}' \
-            "${{ secrets.SLACK_WEBHOOK_URL }}"
+            --data "{\"text\":\"[$STATUS] $REPO (${SHA:0:7})\"}" \
+            "$WEBHOOK" || echo "::warning::Failed to send Slack notification"
