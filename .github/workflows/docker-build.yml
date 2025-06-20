@@ -48,6 +48,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Notify Slack - Build Starting
+        uses: act10ns/slack@v1
+        with:
+          status: starting
+          channel: "#github-actions-notification"
+          message: "🚀 Starting Docker build for `${{ inputs.image_name }}`"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          
       - name: Checkout source code
         uses: actions/checkout@v4
         with:
@@ -124,31 +133,3 @@ jobs:
         with:
           name: dependency-check-html-report
           path: dependency-check-reports/dependency-check-report.html
-
-      - name: Validate and Send Slack Notification
-        if: always()
-        env:
-          WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
-          STATUS: ${{ job.status }}
-          REPO: ${{ github.repository }}
-          SHA: ${{ github.sha }}
-        run: |
-          # Validate URL exists
-          if [ -z "$WEBHOOK" ]; then
-            echo "::error::SLACK_WEBHOOK_URL secret is empty"
-            exit 1
-          fi
-
-          # Validate URL format
-          if [[ ! "$WEBHOOK" =~ ^https://hooks\.slack\.com/services/ ]]; then
-            echo "::error::Invalid Slack webhook format"
-            echo "Expected: https://hooks.slack.com/services/TXXXXXX/BXXXXXX/XXXXXX"
-            echo "Got: ${WEBHOOK:0:50}..."
-            exit 1
-          fi
-
-          # Send notification
-          curl -X POST \
-            -H 'Content-type: application/json' \
-            --data "{\"text\":\"[$STATUS] $REPO (${SHA:0:7})\"}" \
-            "$WEBHOOK" || echo "::warning::Failed to send Slack notification"
