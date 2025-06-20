@@ -137,3 +137,4 @@ jobs:
           channel: '#github-actions-notification'
           status: ${{ job.status }}
           steps: ${{ toJson(steps) }}
+        if: always()
