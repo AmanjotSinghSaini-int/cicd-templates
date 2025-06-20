@@ -42,6 +42,9 @@ on:
         required: false
         type: boolean
         default: true
+    secrets:
+      SLACK_WEBHOOK_URL:
+        required: true
 
 jobs:
   notify-start:
