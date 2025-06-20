@@ -30,6 +30,10 @@ on:
         required: false
         type: boolean
         default: true
+      gitleaks_fetch_depth:
+        required: false
+        type: number
+        default: 1
       continue_on_gitleaks_error:
         required: false
         type: boolean
@@ -118,7 +122,7 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: ${{ inputs.gitleaks_fetch_depth }}
 
       - name: Run Gitleaks scan
         run: |
