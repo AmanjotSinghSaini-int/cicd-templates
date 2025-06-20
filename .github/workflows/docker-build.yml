@@ -111,7 +111,7 @@ jobs:
 
   gitleaks_scan:
     runs-on: ubuntu-latest
-    needs: docker_build
+    #needs: docker_build
     if: ${{ inputs.run_gitleaks }}
     continue-on-error: ${{ inputs.continue_on_gitleaks_error }}
     steps:
