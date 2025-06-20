@@ -52,9 +52,9 @@ jobs:
         uses: act10ns/slack@v1
         with:
           status: starting
-          message: "🚀 Starting Docker build for `${{ inputs.image_name }}`"
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          channel: "#github-actions-notification"
+          message: "🚀 Starting Docker build for `ghcr.io/my-org/my-app:latest`"
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
           
       - name: Checkout source code
         uses: actions/checkout@v4
