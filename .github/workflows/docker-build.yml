@@ -47,12 +47,11 @@ on:
         required: true
 
 jobs:
-          
   docker_build:
     runs-on: ubuntu-latest
-
+    outputs:
+      image_name: ${{ inputs.image_name }}
     steps:
-          
       - name: Checkout source code
         uses: actions/checkout@v4
         with:
@@ -67,11 +66,14 @@ jobs:
             ${{ inputs.build_args }} \
             ${{ inputs.context }}
 
-      - name: Dockerized Trivy scan and generate txt report
-        if: ${{ inputs.run_trivy }}
-        continue-on-error: ${{ inputs.continue_on_trivy_error }}
+  trivy_scan:
+    if: ${{ inputs.run_trivy }}
+    runs-on: ubuntu-latest
+    needs: docker_build
+    continue-on-error: ${{ inputs.continue_on_trivy_error }}
+    steps:
+      - name: Trivy scan inside Docker
         run: |
-          echo "Running Trivy inside Docker"
           mkdir -p trivy-reports
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
@@ -83,19 +85,20 @@ jobs:
             --vuln-type os,library \
             -o /output/trivy-report.txt
 
-      - name: Upload Trivy txt Report
-        if: ${{ inputs.run_trivy }}
+      - name: Upload Trivy Report
         uses: actions/upload-artifact@v4
         with:
           name: trivy-report
           path: trivy-reports/trivy-report.txt
 
-
-      - name: Dockerized Gitleaks scan and generate report
-        if: ${{ inputs.run_gitleaks }}
-        continue-on-error: ${{ inputs.continue_on_gitleaks_error }}
+  gitleaks_scan:
+    if: ${{ inputs.run_gitleaks }}
+    runs-on: ubuntu-latest
+    needs: docker_build
+    continue-on-error: ${{ inputs.continue_on_gitleaks_error }}
+    steps:
+      - name: Run Gitleaks scan in Docker
         run: |
-          echo "Running Gitleaks inside Docker"
           mkdir -p gitleaks-reports
           docker run --rm \
             -v ${{ github.workspace }}:/repo \
@@ -106,16 +109,18 @@ jobs:
             --report-path="/output/gitleaks-report.json"
 
       - name: Upload Gitleaks Report
-        if: ${{ inputs.run_gitleaks }}
         uses: actions/upload-artifact@v4
         with:
           name: gitleaks-report
           path: gitleaks-reports/gitleaks-report.json
 
-
-      - name: Run OWASP Dependency Check (with caching)
-        if: ${{ inputs.run_owasp }}
-        continue-on-error: ${{ inputs.continue_on_owasp_error }}
+  owasp_scan:
+    if: ${{ inputs.run_owasp }}
+    runs-on: ubuntu-latest
+    needs: docker_build
+    continue-on-error: ${{ inputs.continue_on_owasp_error }}
+    steps:
+      - name: Run OWASP Dependency Check
         uses: dependency-check/Dependency-Check_Action@main
         with:
           project: "MyProject"
@@ -123,18 +128,20 @@ jobs:
           format: "HTML"
           out: "dependency-check-reports"
 
-      - name: Upload OWASP Dependency Check Report
-        if: ${{ inputs.run_owasp }}
+      - name: Upload OWASP Report
         uses: actions/upload-artifact@v4
         with:
           name: dependency-check-html-report
           path: dependency-check-reports/dependency-check-report.html
 
-      - name: Slack Notification
+  slack_notify:
+    runs-on: ubuntu-latest
+    needs: [trivy_scan, gitleaks_scan, owasp_scan]
+    if: always()
+    steps:
+      - name: Send Slack Notification
         uses: act10ns/slack@v1
         with:
           webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
           channel: '#github-actions-notification'
           status: ${{ job.status }}
-          steps: ${{ toJson(steps) }}
-        if: always()
