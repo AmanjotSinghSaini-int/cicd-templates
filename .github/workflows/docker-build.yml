@@ -48,12 +48,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Notify Slack - Build Starting
-        uses: act10ns/slack@v1
-        with:
-          status: starting
-          message: "🚀 Starting Docker build for `ghcr.io/my-org/my-app:latest`"
-          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
           
       - name: Checkout source code
         uses: actions/checkout@v4
