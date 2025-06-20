@@ -44,6 +44,17 @@ on:
         default: true
 
 jobs:
+  notify-start:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Slack - Build Starting
+        uses: act10ns/slack@v1
+        with:
+          status: starting
+          channel: "#github-actions-notification"
+          message: "🚀 Starting Docker build for `ghcr.io/my-org/my-app:latest`"
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          
   docker_build:
     runs-on: ubuntu-latest
 
