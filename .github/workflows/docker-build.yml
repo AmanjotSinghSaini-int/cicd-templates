@@ -132,7 +132,6 @@ jobs:
 
   gitleaks_scan:
     runs-on: ubuntu-latest
-    needs: docker_build
     if: ${{ inputs.run_gitleaks }}
     continue-on-error: ${{ inputs.continue_on_gitleaks_error }}
     steps:
@@ -162,7 +161,6 @@ jobs:
       
   owasp_scan:
     runs-on: ubuntu-latest
-    needs: docker_build
     if: ${{ inputs.run_owasp }}
     continue-on-error: ${{ inputs.continue_on_owasp_error }}
     steps:
