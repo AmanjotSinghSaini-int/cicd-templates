@@ -46,9 +46,26 @@ on:
         required: false
         type: boolean
         default: true
+      push_to_ecr:
+        required: false
+        type: boolean
+        default: false
+      ecr_repository:
+        required: false
+        type: string
+
     secrets:
       SLACK_WEBHOOK_URL:
         required: true
+      AWS_ACCESS_KEY_ID:
+        required: false
+      AWS_SECRET_ACCESS_KEY:
+        required: false
+      AWS_REGION:
+        required: false
+      AWS_ACCOUNT_ID:
+        required: false
+
 
 jobs:
   docker_build:
@@ -165,6 +182,39 @@ jobs:
         with:
           name: dependency-check-html-report
           path: dependency-check-reports/dependency-check-report.html
+
+  
+  push_to_ecr:
+    runs-on: ubuntu-latest
+    needs: [trivy_scan, gitleaks_scan, owasp_scan]
+    if: ${{ inputs.push_to_ecr == true }}
+    steps:
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: built-docker-image
+
+      - name: Load Docker image
+        run: docker load -i my-app.tar
+
+      - name: Log in to AWS ECR
+        uses: aws-actions/amazon-ecr-login@v1
+        with:
+          mask-password: true
+
+      - name: Tag image for AWS ECR
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          ECR_IMAGE="${ECR_REGISTRY}/${{ inputs.ecr_repository }}:latest"
+          docker tag ${{ inputs.image_name }} $ECR_IMAGE
+          echo "ECR_IMAGE=$ECR_IMAGE" >> $GITHUB_ENV
+
+      - name: Push to AWS ECR
+        run: docker push ${{ env.ECR_IMAGE }}
+
 
   slack_notify:
     runs-on: ubuntu-latest
