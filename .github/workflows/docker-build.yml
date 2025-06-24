@@ -66,10 +66,60 @@ on:
       AWS_ACCOUNT_ID:
         required: false
 
-
 jobs:
+  gitleaks_scan:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.run_gitleaks }}
+    continue-on-error: ${{ inputs.continue_on_gitleaks_error }}
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ inputs.gitleaks_fetch_depth }}
+
+      - name: Run Gitleaks scan
+        run: |
+          mkdir -p gitleaks-reports
+          docker run --rm \
+            -v ${{ github.workspace }}:/repo \
+            -v ${{ github.workspace }}/gitleaks-reports:/output \
+            zricethezav/gitleaks:latest detect \
+            --source="/repo" \
+            --report-format="json" \
+            --report-path="/output/gitleaks-report.json"
+
+      - name: Upload Gitleaks report
+        if: always() && inputs.run_gitleaks
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks-reports/gitleaks-report.json
+
+  owasp_scan:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.run_owasp }}
+    continue-on-error: ${{ inputs.continue_on_owasp_error }}
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: "MyProject"
+          path: "."
+          format: "HTML"
+          out: "dependency-check-reports"
+
+      - name: Upload OWASP HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-html-report
+          path: dependency-check-reports/dependency-check-report.html
+
   docker_build:
     runs-on: ubuntu-latest
+    needs: [gitleaks_scan, owasp_scan]
     outputs:
       image_name: ${{ inputs.image_name }}
     steps:
@@ -95,7 +145,6 @@ jobs:
         with:
           name: built-docker-image
           path: my-app.tar
-
 
   trivy_scan:
     if: ${{ inputs.run_trivy }}
@@ -130,107 +179,51 @@ jobs:
           name: trivy-report
           path: trivy-reports/trivy-report.txt
 
-  gitleaks_scan:
-    runs-on: ubuntu-latest
-    if: ${{ inputs.run_gitleaks }}
-    continue-on-error: ${{ inputs.continue_on_gitleaks_error }}
-    steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ inputs.gitleaks_fetch_depth }}
-
-      - name: Run Gitleaks scan
-        run: |
-          mkdir -p gitleaks-reports
-          docker run --rm \
-            -v ${{ github.workspace }}:/repo \
-            -v ${{ github.workspace }}/gitleaks-reports:/output \
-            zricethezav/gitleaks:latest detect \
-            --source="/repo" \
-            --report-format="json" \
-            --report-path="/output/gitleaks-report.json"
-
-      - name: Upload Gitleaks report
-        if: always() && inputs.run_gitleaks
-        uses: actions/upload-artifact@v4
-        with:
-          name: gitleaks-report
-          path: gitleaks-reports/gitleaks-report.json
-
-      
-  owasp_scan:
-    runs-on: ubuntu-latest
-    if: ${{ inputs.run_owasp }}
-    continue-on-error: ${{ inputs.continue_on_owasp_error }}
-    steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
-
-      - name: Run OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@main
-        with:
-          project: "MyProject"
-          path: "."             
-          format: "HTML"
-          out: "dependency-check-reports"
-
-      - name: Upload OWASP HTML report
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependency-check-html-report
-          path: dependency-check-reports/dependency-check-report.html
-
-  
   push_to_ecr:
     runs-on: ubuntu-latest
-    needs: [trivy_scan, gitleaks_scan, owasp_scan]
+    needs: [trivy_scan]
     if: ${{ inputs.push_to_ecr == true }}
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_REGION: ${{ secrets.AWS_REGION }}   
+      AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
     steps:
-    - name: Download Docker image artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: built-docker-image
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: built-docker-image
 
-    - name: Load Docker image
-      run: docker load -i my-app.tar
+      - name: Load Docker image
+        run: docker load -i my-app.tar
 
-    - name: Log in to AWS ECR
-      uses: aws-actions/amazon-ecr-login@v1
-      with:
-        mask-password: true
+      - name: Log in to AWS ECR
+        uses: aws-actions/amazon-ecr-login@v1
+        with:
+          mask-password: true
 
-    - name: Tag image for AWS ECR
-      run: |
-        ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-        ECR_IMAGE="${ECR_REGISTRY}/${{ inputs.ecr_repository }}:latest"
-        docker tag ${{ inputs.image_name }} $ECR_IMAGE
-        echo "ECR_IMAGE=$ECR_IMAGE" >> $GITHUB_ENV
+      - name: Tag image for AWS ECR
+        run: |
+          ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          ECR_IMAGE="${ECR_REGISTRY}/${{ inputs.ecr_repository }}:latest"
+          docker tag ${{ inputs.image_name }} $ECR_IMAGE
+          echo "ECR_IMAGE=$ECR_IMAGE" >> $GITHUB_ENV
 
-    - name: Push to AWS ECR
-      run: docker push ${{ env.ECR_IMAGE }}
-
-
+      - name: Push to AWS ECR
+        run: docker push ${{ env.ECR_IMAGE }}
 
   slack_notify:
     runs-on: ubuntu-latest
-    needs: [trivy_scan, gitleaks_scan, owasp_scan]
+    needs: [push_to_ecr]
     if: always()
     steps:
       - name: Determine overall status
         id: outcome
         run: |
-          if [[ "${{ needs.trivy_scan.result }}" == "failure" || \
-              "${{ needs.gitleaks_scan.result }}" == "failure" || \
-              "${{ needs.owasp_scan.result }}" == "failure" ]]; then
-          echo "status=failure" >> $GITHUB_OUTPUT
+          if [[ "${{ needs.push_to_ecr.result }}" == "failure" ]]; then
+            echo "status=failure" >> $GITHUB_OUTPUT
           else
-          echo "status=success" >> $GITHUB_OUTPUT
+            echo "status=success" >> $GITHUB_OUTPUT
           fi
 
       - name: Send Slack Notification
