@@ -256,18 +256,17 @@ jobs:
     needs: [push_to_ecr]
     if: always()
     steps:
-      - name: Determine overall status
-        id: outcome
-        run: |
-          if [[ "${{ needs.push_to_ecr.result }}" == "failure" ]]; then
-            echo "status=failure" >> $GITHUB_OUTPUT
-          else
-            echo "status=success" >> $GITHUB_OUTPUT
-          fi
+    - id: outcome
+      run: |
+        result="${{ needs.push_to_ecr.result }}"
+        if [[ "$result" == "failure" || "$result" == "skipped" ]]; then
+          echo "status=failure" >> $GITHUB_OUTPUT
+        else
+          echo "status=success" >> $GITHUB_OUTPUT
+        fi
 
-      - name: Send Slack Notification
-        uses: act10ns/slack@v1
-        with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
-          channel: '#github-actions-notification'
-          status: ${{ steps.outcome.outputs.status }}
+    - uses: act10ns/slack@v1
+      with:
+        webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        channel: '#github-actions-notification'
+        status: ${{ steps.outcome.outputs.status }}
