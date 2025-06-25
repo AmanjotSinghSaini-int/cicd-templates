@@ -66,6 +66,21 @@ on:
         required: false
         type: string
 
+      run_sonar:
+        required: false
+        type: boolean
+        default: false
+      sonar_host_url:
+        required: false
+        type: string
+      sonar_project_key:
+        required: false
+        type: string
+      sonar_project_name:
+        required: false
+        type: string
+
+
 
     secrets:
       SLACK_WEBHOOK_URL:
@@ -77,6 +92,8 @@ on:
       AWS_REGION:
         required: false
       AWS_ACCOUNT_ID:
+        required: false
+      SONAR_TOKEN:
         required: false
 
 jobs:
@@ -156,9 +173,37 @@ jobs:
           name: dependency-check-html-report
           path: dependency-check-reports/dependency-check-report.html
 
+  sonarqube_scan:
+      runs-on: ubuntu-latest
+      needs: [owasp_scan]
+      if: ${{ inputs.run_sonar }}
+      steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Download and run SonarQube scanner
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
+          unzip sonar-scanner-cli-5.0.1.3006-linux.zip
+          export PATH="$PWD/sonar-scanner-5.0.1.3006-linux/bin:$PATH"
+          sonar-scanner \
+            -Dsonar.projectKey=${{ inputs.sonar_project_key }} \
+            -Dsonar.projectName="${{ inputs.sonar_project_name }}" \
+            -Dsonar.host.url=${{ inputs.sonar_host_url }} \
+            -Dsonar.login=$SONAR_TOKEN
+
+
   docker_build:
     runs-on: ubuntu-latest
-    needs: [pytest, owasp_scan]
+    needs: [pytest, owasp_scan, sonarqube_scan]
     outputs:
       image_name: ${{ inputs.image_name }}
     steps:
