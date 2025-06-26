@@ -57,7 +57,17 @@ on:
         required: false
         type: boolean
         default: true
-        
+
+      image_size_threshold_mb:
+        required: false
+        type: number
+        default: 100
+
+      continue_on_size_check_error:
+        required: false
+        type: boolean
+        default: false
+
       push_to_ecr:
         required: false
         type: boolean
@@ -263,10 +273,46 @@ jobs:
           name: trivy-report
           path: trivy-reports/trivy-report.txt
 
+  docker_image_size_check:
+    runs-on: ubuntu-latest
+    needs: [docker_build]
+    outputs:
+      pass_size_check: ${{ steps.check_size.outputs.pass_size_check }}
+    continue-on-error: ${{ inputs.continue_on_size_check_error }}
+    steps:
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: built-docker-image
+
+      - name: Load Docker image
+        run: docker load -i my-app.tar
+
+      - name: Check Docker image size
+        id: check_size
+        run: |
+          IMAGE_NAME="${{ inputs.image_name }}"
+          IMAGE_SIZE=$(docker image inspect "$IMAGE_NAME" --format='{{.Size}}')
+          SIZE_MB=$((IMAGE_SIZE / 1024 / 1024))
+          THRESHOLD=${{ inputs.image_size_threshold_mb }}
+          echo "Image size is ${SIZE_MB} MB (Threshold: ${THRESHOLD} MB)"
+
+          if [ "$SIZE_MB" -le "$THRESHOLD" ]; then
+            echo "pass_size_check=true" >> $GITHUB_OUTPUT
+          else
+            echo "pass_size_check=false" >> $GITHUB_OUTPUT
+            echo "Image exceeds threshold. Blocking ECR push."
+            if [ "${{ inputs.continue_on_size_check_error }}" != "true" ]; then
+              exit 1
+            fi
+          fi
+
+ 
+
   push_to_ecr:
     runs-on: ubuntu-latest
-    needs: [trivy_scan]
-    if: ${{ inputs.push_to_ecr == true }}
+    needs: [trivy_scan, docker_image_size_check]
+    if: ${{ inputs.push_to_ecr && needs.docker_image_size_check.outputs.pass_size_check == 'true' }}
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
