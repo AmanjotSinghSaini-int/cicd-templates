@@ -181,7 +181,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dependency-check-html-report
-          path: dependency-check-reports/dependency-check-html-report.html
+          path: dependency-check-reports/dependency-check-report.html
 
   sonarqube_scan:
       runs-on: ubuntu-latest
