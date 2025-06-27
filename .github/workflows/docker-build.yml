@@ -180,8 +180,8 @@ jobs:
       - name: Upload OWASP HTML report
         uses: actions/upload-artifact@v4
         with:
-          name: owasp-html-report
-          path: dependency-check-reports/owasp-html-report.html
+          name: dependency-check-html-report
+          path: dependency-check-reports/dependency-check-html-report.html
 
   sonarqube_scan:
       runs-on: ubuntu-latest
