@@ -166,22 +166,32 @@ jobs:
     if: ${{ inputs.run_owasp }}
     continue-on-error: ${{ inputs.continue_on_owasp_error }}
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
+    - name: Checkout source code
+      uses: actions/checkout@v4
 
-      - name: Run OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@main
-        with:
-          project: "MyProject"
-          path: "."
-          format: "HTML"
-          out: "dependency-check-reports"
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
 
-      - name: Upload OWASP HTML report
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependency-check-html-report
-          path: dependency-check-reports/dependency-check-report.html
+    - name: Install Python Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run OWASP Dependency Check
+      uses: dependency-check/Dependency-Check_Action@main
+      with:
+        project: "MyProject"
+        path: "."
+        format: "HTML"
+        out: "dependency-check-reports"
+
+    - name: Upload OWASP HTML report
+      uses: actions/upload-artifact@v4
+      with:
+        name: dependency-check-html-report
+        path: dependency-check-reports/dependency-check-report.html
 
   sonarqube_scan:
       runs-on: ubuntu-latest
