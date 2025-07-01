@@ -90,15 +90,7 @@ on:
         required: false
         type: string
 
-      run_cd:
-        required: false
-        type: boolean
-        default: false
-      image_url:
-        required: false
-        type: string
-
-
+      
 
     secrets:
       SLACK_WEBHOOK_URL:
@@ -326,7 +318,6 @@ jobs:
           fi
 
  
-
   push_to_ecr:
     runs-on: ubuntu-latest
     needs: [trivy_scan, docker_image_size_check]
@@ -336,80 +327,59 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-    outputs:                           
-      ecr_image_url: ${{ steps.tag_image.outputs.ecr_image_url }}  
+    outputs:
+      ecr_image_url: ${{ steps.tag_image.outputs.ecr_image_url }}
     steps:
-    - name: Download Docker image artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: built-docker-image
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: built-docker-image
 
-    - name: Load Docker image
-      run: docker load -i my-app.tar
+      - name: Load Docker image
+        run: docker load -i my-app.tar
 
-    - name: Log in to AWS ECR
-      uses: aws-actions/amazon-ecr-login@v1
-      with:
-        mask-password: true
+      - name: Log in to AWS ECR
+        uses: aws-actions/amazon-ecr-login@v1
+        with:
+          mask-password: true
 
-    - name: Tag image for AWS ECR       
-      id: tag_image                        
-      run: |
-        ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-        ECR_IMAGE="${ECR_REGISTRY}/${{ inputs.ecr_repository }}:latest"
-        docker tag ${{ inputs.image_name }} $ECR_IMAGE
+      - name: Tag image for AWS ECR
+        id: tag_image
+        run: |
+          ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          ECR_IMAGE="${ECR_REGISTRY}/${{ inputs.ecr_repository }}:latest"
+          docker tag ${{ inputs.image_name }} $ECR_IMAGE
+          echo "ECR_IMAGE=$ECR_IMAGE" >> $GITHUB_ENV
+          echo "ecr_image_url=$ECR_IMAGE" >> $GITHUB_OUTPUT
 
-        echo "ECR_IMAGE=$ECR_IMAGE" >> $GITHUB_ENV
-        echo "ecr_image_url=$ECR_IMAGE" >> $GITHUB_OUTPUT       
+      - name: Push to AWS ECR
+        run: docker push ${{ env.ECR_IMAGE }}
 
-    - name: Push to AWS ECR
-      run: docker push ${{ env.ECR_IMAGE }}
+      - name: Save ECR Image URL to file
+        run: |
+          echo "${{ env.ECR_IMAGE }}" > image-url.txt
 
+      - name: Upload image URL as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecr-image-url
+          path: image-url.txt
 
   slack_notify:
     runs-on: ubuntu-latest
-    needs: [deploy]
+    needs: [push_to_ecr]
     if: always()
     steps:
-    - id: outcome
-      run: |
-        result="${{ needs.push_to_ecr.result }}"
-        if [[ "$result" == "failure" || "$result" == "skipped" ]]; then
-          echo "status=failure" >> $GITHUB_OUTPUT
-        else
-          echo "status=success" >> $GITHUB_OUTPUT
-        fi
+      - id: outcome
+        run: |
+          result="${{ needs.push_to_ecr.result }}"
+          if [[ "$result" == "failure" || "$result" == "skipped" ]]; then
+            echo "status=failure" >> $GITHUB_OUTPUT
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
 
-    - uses: act10ns/slack@v1
-      with:
-        webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
-        channel: '#github-actions-notification'
-        status: ${{ steps.outcome.outputs.status }}
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: [push_to_ecr]
-    if: ${{ inputs.run_cd }}
-    steps:
-    - name: Checkout repo
-      uses: actions/checkout@v4
-
-    - uses: aws-actions/configure-aws-credentials@v2
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_REGION }}
-
-    - uses: azure/setup-kubectl@v3
-
-    - name: Update kubeconfig
-      run: aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name my-cluster
-
-    - name: Substitute ECR image
-      run: |
-        export IMAGE_URL="${{ needs.push_to_ecr.outputs.ecr_image_url }}"
-        envsubst < deployment.template.yaml > deployment.yaml
-
-    - name: Deploy to EKS
-      run: kubectl apply -f deployment.yaml
-
+      - uses: act10ns/slack@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          channel: '#github-actions-notification'
+          status: ${{ steps.outcome.outputs.status }}
