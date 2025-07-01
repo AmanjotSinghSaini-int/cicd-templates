@@ -46,8 +46,9 @@ jobs:
       - name: Substitute image tag in deployment file
         run: |
           IMAGE="${{ inputs.ecr_repo }}:${{ inputs.image_tag }}"
-          sed "s|{{IMAGE}}|$IMAGE|g" ${{ inputs.deployment_file }} > final-deployment.yaml
+          sed "s|{{IMAGE}}|$IMAGE|g" "${{ inputs.deployment_file }}" > final-deployment.yaml
           cat final-deployment.yaml
+
 
       - name: Deploy to EKS
         run: |
