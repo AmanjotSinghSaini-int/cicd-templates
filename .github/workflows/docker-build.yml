@@ -90,7 +90,7 @@ on:
         required: false
         type: string
 
-      
+
 
     secrets:
       SLACK_WEBHOOK_URL:
@@ -166,32 +166,22 @@ jobs:
     if: ${{ inputs.run_owasp }}
     continue-on-error: ${{ inputs.continue_on_owasp_error }}
     steps:
-    - name: Checkout source code
-      uses: actions/checkout@v4
+      - name: Checkout source code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: "MyProject"
+          path: "."
+          format: "HTML"
+          out: "dependency-check-reports"
 
-    - name: Install Python Dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-
-    - name: Run OWASP Dependency Check
-      uses: dependency-check/Dependency-Check_Action@main
-      with:
-        project: "MyProject"
-        path: "."
-        format: "HTML"
-        out: "dependency-check-reports"
-
-    - name: Upload OWASP HTML report
-      uses: actions/upload-artifact@v4
-      with:
-        name: dependency-check-html-report
-        path: dependency-check-reports/dependency-check-report.html
+      - name: Upload OWASP HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-html-report
+          path: dependency-check-reports/dependency-check-report.html
 
   sonarqube_scan:
       runs-on: ubuntu-latest
@@ -318,6 +308,7 @@ jobs:
           fi
 
  
+
   push_to_ecr:
     runs-on: ubuntu-latest
     needs: [trivy_scan, docker_image_size_check]
@@ -327,8 +318,6 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-    outputs:
-      ecr_image_url: ${{ steps.tag_image.outputs.ecr_image_url }}
     steps:
       - name: Download Docker image artifact
         uses: actions/download-artifact@v4
@@ -344,42 +333,31 @@ jobs:
           mask-password: true
 
       - name: Tag image for AWS ECR
-        id: tag_image
         run: |
           ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
           ECR_IMAGE="${ECR_REGISTRY}/${{ inputs.ecr_repository }}:latest"
           docker tag ${{ inputs.image_name }} $ECR_IMAGE
           echo "ECR_IMAGE=$ECR_IMAGE" >> $GITHUB_ENV
-          echo "ecr_image_url=$ECR_IMAGE" >> $GITHUB_OUTPUT
 
       - name: Push to AWS ECR
         run: docker push ${{ env.ECR_IMAGE }}
-
-      - name: Save ECR Image URL to file
-        run: |
-          echo "${{ env.ECR_IMAGE }}" > image-url.txt
-
-      - name: Upload image URL as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ecr-image-url
-          path: image-url.txt
 
   slack_notify:
     runs-on: ubuntu-latest
     needs: [push_to_ecr]
     if: always()
     steps:
-      - id: outcome
-        run: |
-          result="${{ needs.push_to_ecr.result }}"
-          if [[ "$result" == "failure" || "$result" == "skipped" ]]; then
-            echo "status=failure" >> $GITHUB_OUTPUT
-          else
-            echo "status=success" >> $GITHUB_OUTPUT
+    - id: outcome
+      run: |
+        result="${{ needs.push_to_ecr.result }}"
+        if [[ "$result" == "failure" || "$result" == "skipped" ]]; then
+          echo "status=failure" >> $GITHUB_OUTPUT
+        else
+          echo "status=success" >> $GITHUB_OUTPUT
+        fi
 
-      - uses: act10ns/slack@v1
-        with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
-          channel: '#github-actions-notification'
-          status: ${{ steps.outcome.outputs.status }}
+    - uses: act10ns/slack@v1
+      with:
+        webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        channel: '#github-actions-notification'
+        status: ${{ steps.outcome.outputs.status }}
