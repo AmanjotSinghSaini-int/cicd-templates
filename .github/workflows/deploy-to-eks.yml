@@ -166,10 +166,6 @@ jobs:
           echo "Deployment did not become healthy after $MAX_RETRIES retries."
           exit 1
 
-      - name: 🔍 Debug prune input
-        run: echo "delete_old_images = ${{ toJSON(inputs.delete_old_images) }}"
-
-
       - name: Prune old ECR images (keep latest 5)
         if: ${{ inputs.delete_old_images == true }}
         run: |
