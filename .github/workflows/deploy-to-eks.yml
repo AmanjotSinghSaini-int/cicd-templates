@@ -92,3 +92,4 @@ jobs:
           else
             echo "Invalid deployment_mode: ${{ inputs.deployment_mode }}"
             exit 1
+          fi
