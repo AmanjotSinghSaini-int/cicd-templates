@@ -167,7 +167,7 @@ jobs:
           exit 1
 
       - name: Prune old ECR images (keep latest 5)
-        if: ${{ inputs.delete_old_images }}
+        if: ${{ inputs.delete_old_images == true }}
         run: |
           set -e
           REPO_NAME=$(basename ${{ inputs.ecr_repo }})
