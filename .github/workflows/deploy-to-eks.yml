@@ -9,10 +9,18 @@ on:
       eks_cluster_name:
         required: true
         type: string
+      deployment_mode:
+        required: false
+        type: string
+        default: 'singlefile'  # Options: singlefile, filenames, recursive
       deployment_file:
         required: false
         type: string
         default: './deployment.template.yaml'
+      deployment_files:
+        required: false
+        type: string
+        default: ''
     secrets:
       AWS_ACCESS_KEY_ID:
         required: true
@@ -55,7 +63,8 @@ jobs:
           echo "Latest ECR tag: $IMAGE_TAG"
           echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-      - name: Substitute image tag in deployment file
+      - name: Substitute image tag in deployment.template.yaml (only for singlefile mode)
+        if: ${{ inputs.deployment_mode == 'singlefile' }}
         run: |
           IMAGE="${{ inputs.ecr_repo }}:${{ steps.get-tag.outputs.image_tag }}"
           sed "s|{{IMAGE}}|$IMAGE|g" ${{ inputs.deployment_file }} > final-deployment.yaml
@@ -63,4 +72,23 @@ jobs:
 
       - name: Deploy to EKS
         run: |
-          kubectl apply -f final-deployment.yaml
+          echo "Deployment mode: ${{ inputs.deployment_mode }}"
+
+          if [ "${{ inputs.deployment_mode }}" = "singlefile" ]; then
+            echo "Applying single file: final-deployment.yaml"
+            kubectl apply -f final-deployment.yaml
+
+          elif [ "${{ inputs.deployment_mode }}" = "filenames" ]; then
+            IFS=',' read -ra FILES <<< "${{ inputs.deployment_files }}"
+            for file in "${FILES[@]}"; do
+              echo "Applying file: $file"
+              kubectl apply -f "$file"
+            done
+
+          elif [ "${{ inputs.deployment_mode }}" = "recursive" ]; then
+            echo "Applying all YAML files recursively from repo root..."
+            kubectl apply -R -f .
+
+          else
+            echo "Invalid deployment_mode: ${{ inputs.deployment_mode }}"
+            exit 1
