@@ -92,13 +92,13 @@ jobs:
             done
 
           elif [ "${{ inputs.deployment_mode }}" = "recursive" ]; then
-            mkdir -p final-recursive
-            find . -type f -name '*.yaml' | while read -r file; do
-              relpath=$(realpath --relative-to=. "$file")
-              mkdir -p "final-recursive/$(dirname "$relpath")"
-              sed "s|{{IMAGE}}|$IMAGE|g" "$file" > "final-recursive/$relpath"
-              echo "Processed: $file → final-recursive/$relpath"
-            done
+          mkdir -p final-recursive
+          find ./k8s -type f -name '*.yaml' | while read -r file; do
+            relpath=$(realpath --relative-to=. "$file")
+            mkdir -p "final-recursive/$(dirname "$relpath")"
+            sed "s|{{IMAGE}}|$IMAGE|g" "$file" > "final-recursive/$relpath"
+            echo "Processed: $file → final-recursive/$relpath"
+          done
 
           else
             echo "Unknown deployment mode: ${{ inputs.deployment_mode }}"
@@ -133,8 +133,8 @@ jobs:
           done
 
           elif [ "${{ inputs.deployment_mode }}" = "recursive" ]; then
-            echo "Applying all YAML files recursively from repo root..."
-            kubectl apply -R -f .
+          echo "Applying all YAML files recursively from final-recursive/"
+          kubectl apply -R -f final-recursive
 
           else
             echo "Invalid deployment_mode: ${{ inputs.deployment_mode }}"
