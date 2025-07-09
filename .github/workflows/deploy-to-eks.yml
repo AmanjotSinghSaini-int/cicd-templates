@@ -127,11 +127,10 @@ jobs:
             kubectl apply -f final-deployment.yaml
 
           elif [ "${{ inputs.deployment_mode }}" = "filenames" ]; then
-            IFS=',' read -ra FILES <<< "${{ inputs.deployment_files }}"
-            for file in "${FILES[@]}"; do
-              echo "Applying file: $file"
-              kubectl apply -f "$file"
-            done
+          for file in final-files/*.yaml; do
+            echo "Applying file: $file"
+            kubectl apply -f "$file"
+          done
 
           elif [ "${{ inputs.deployment_mode }}" = "recursive" ]; then
             echo "Applying all YAML files recursively from repo root..."
