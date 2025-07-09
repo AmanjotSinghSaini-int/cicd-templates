@@ -73,13 +73,6 @@ jobs:
           echo "Latest ECR tag: $IMAGE_TAG"
           echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-      - name: Substitute image tag in deployment.template.yaml (only for singlefile mode)
-        if: ${{ inputs.deployment_mode == 'singlefile' }}
-        run: |
-          IMAGE="${{ inputs.ecr_repo }}:${{ steps.get-tag.outputs.image_tag }}"
-          sed "s|{{IMAGE}}|$IMAGE|g" ${{ inputs.deployment_file }} > final-deployment.yaml
-          cat final-deployment.yaml
-
       - name: Substitute {{IMAGE}} placeholder
         run: |
           IMAGE="${{ inputs.ecr_repo }}:${{ steps.get-tag.outputs.image_tag }}"
