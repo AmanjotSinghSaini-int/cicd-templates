@@ -159,7 +159,7 @@ jobs:
           echo "Deployment did not become healthy after $MAX_RETRIES retries."
           exit 1
 
-      - name: Prune old ECR images (keep latest 5)
+      - name: Prune old ECR images (keep latest 5 + delete untagged)
         if: ${{ inputs.delete_old_images == true }}
         run: |
           set -e
@@ -167,31 +167,49 @@ jobs:
           REGION=${{ secrets.AWS_REGION }}
           IMAGES_TO_KEEP=5
 
-          echo "Fetching image digests from ECR repo: $REPO_NAME..."
+          echo "🔍 Fetching all tagged image details from ECR: $REPO_NAME"
 
-          IMAGE_DIGESTS=$(aws ecr describe-images \
+          TAGGED_IMAGE_DETAILS=$(aws ecr describe-images \
             --repository-name "$REPO_NAME" \
             --region "$REGION" \
-            --query 'sort_by(imageDetails,& imagePushedAt)[].imageDigest' \
-            --output text)
+            --query 'sort_by(imageDetails,& imagePushedAt)[?imageTags!=null]' \
+            --output json)
 
-          IMAGE_COUNT=$(echo "$IMAGE_DIGESTS" | wc -l)
+          TAGGED_IMAGE_COUNT=$(echo "$TAGGED_IMAGE_DETAILS" | jq length)
 
-          if [ "$IMAGE_COUNT" -le "$IMAGES_TO_KEEP" ]; then
-            echo "Only $IMAGE_COUNT image(s) found — no pruning needed."
-            exit 0
+          if [ "$TAGGED_IMAGE_COUNT" -le "$IMAGES_TO_KEEP" ]; then
+            echo "✅ Only $TAGGED_IMAGE_COUNT tagged image(s) found — no pruning of tagged images needed."
+          else
+            echo "🧹 Pruning old tagged images..."
+            DIGESTS_TO_DELETE=$(echo "$TAGGED_IMAGE_DETAILS" | jq -r ".[0:($TAGGED_IMAGE_COUNT - $IMAGES_TO_KEEP)] | .[].imageDigest")
+
+            for DIGEST in $DIGESTS_TO_DELETE; do
+              echo "Deleting tagged image digest: $DIGEST"
+              aws ecr batch-delete-image \
+                --repository-name "$REPO_NAME" \
+                --region "$REGION" \
+                --image-ids imageDigest=$DIGEST
+            done
           fi
 
-          echo "Total images: $IMAGE_COUNT — keeping latest $IMAGES_TO_KEEP"
+          echo "🔍 Checking for untagged images..."
 
-            DIGESTS_TO_DELETE=$(echo "$IMAGE_DIGESTS" | head -n -${IMAGES_TO_KEEP})
+          UNTAGGED_IMAGES=$(aws ecr list-images \
+            --repository-name "$REPO_NAME" \
+            --region "$REGION" \
+            --filter tagStatus=UNTAGGED \
+            --query 'imageIds[*]' \
+            --output json)
 
-          for DIGEST in $DIGESTS_TO_DELETE; do
-            echo "Deleting image digest: $DIGEST"
+          if [ "$(echo "$UNTAGGED_IMAGES" | jq length)" -eq 0 ]; then
+            echo "✅ No untagged images to delete."
+          else
+            echo "🧹 Deleting untagged images..."
             aws ecr batch-delete-image \
               --repository-name "$REPO_NAME" \
               --region "$REGION" \
-              --image-ids imageDigest=$DIGEST
-          done
+              --image-ids "$UNTAGGED_IMAGES"
+          fi
 
-          echo "Old ECR images cleaned up."
+          echo "✅ ECR image pruning complete."
+
