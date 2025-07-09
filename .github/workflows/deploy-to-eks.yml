@@ -105,6 +105,18 @@ jobs:
             exit 1
           fi
 
+      - name: Debug Show processed files (filenames mode)
+        if: ${{ inputs.deployment_mode == 'filenames' }}
+        run: |
+          echo "----- Showing substituted YAML files -----"
+          for file in final-files/*.yaml; do
+            echo "File: $file"
+            echo "-----------------------------------------"
+            cat "$file"
+            echo ""
+          done
+
+
 
       - name: Deploy to EKS
         run: |
