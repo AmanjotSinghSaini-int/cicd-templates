@@ -105,19 +105,6 @@ jobs:
             exit 1
           fi
 
-      - name: Debug Show processed files (filenames mode)
-        if: ${{ inputs.deployment_mode == 'filenames' }}
-        run: |
-          echo "----- Showing substituted YAML files -----"
-          for file in final-files/*.yaml; do
-            echo "File: $file"
-            echo "-----------------------------------------"
-            cat "$file"
-            echo ""
-          done
-
-
-
       - name: Deploy to EKS
         run: |
           echo "Deployment mode: ${{ inputs.deployment_mode }}"
@@ -178,7 +165,7 @@ jobs:
           REGION=${{ secrets.AWS_REGION }}
           IMAGES_TO_KEEP=5
 
-          echo "🔍 Fetching all tagged image details from ECR: $REPO_NAME"
+          echo "Fetching all tagged image details from ECR: $REPO_NAME"
 
           TAGGED_IMAGE_DETAILS=$(aws ecr describe-images \
             --repository-name "$REPO_NAME" \
@@ -189,9 +176,9 @@ jobs:
           TAGGED_IMAGE_COUNT=$(echo "$TAGGED_IMAGE_DETAILS" | jq length)
 
           if [ "$TAGGED_IMAGE_COUNT" -le "$IMAGES_TO_KEEP" ]; then
-            echo "✅ Only $TAGGED_IMAGE_COUNT tagged image(s) found — no pruning of tagged images needed."
+            echo "Only $TAGGED_IMAGE_COUNT tagged image(s) found — no pruning of tagged images needed."
           else
-            echo "🧹 Pruning old tagged images..."
+            echo "Pruning old tagged images..."
             DIGESTS_TO_DELETE=$(echo "$TAGGED_IMAGE_DETAILS" | jq -r ".[0:($TAGGED_IMAGE_COUNT - $IMAGES_TO_KEEP)] | .[].imageDigest")
 
             for DIGEST in $DIGESTS_TO_DELETE; do
@@ -203,7 +190,7 @@ jobs:
             done
           fi
 
-          echo "🔍 Checking for untagged images..."
+          echo "Checking for untagged images..."
 
           UNTAGGED_IMAGES=$(aws ecr list-images \
             --repository-name "$REPO_NAME" \
@@ -213,14 +200,14 @@ jobs:
             --output json)
 
           if [ "$(echo "$UNTAGGED_IMAGES" | jq length)" -eq 0 ]; then
-            echo "✅ No untagged images to delete."
+            echo "No untagged images to delete."
           else
-            echo "🧹 Deleting untagged images..."
+            echo "Deleting untagged images..."
             aws ecr batch-delete-image \
               --repository-name "$REPO_NAME" \
               --region "$REGION" \
               --image-ids "$UNTAGGED_IMAGES"
           fi
 
-          echo "✅ ECR image pruning complete."
+          echo "ECR image pruning complete."
 
