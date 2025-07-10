@@ -125,6 +125,11 @@ jobs:
             exit 1
           fi
 
+      - name: Force rollout restart
+        run: |
+          kubectl rollout restart deployment my-app
+
+
       - name: Validate rollout is successful
         continue-on-error: ${{ inputs.continue_on_validation_error }}
         run: |
