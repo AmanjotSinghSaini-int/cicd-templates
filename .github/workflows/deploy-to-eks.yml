@@ -45,9 +45,6 @@ jobs:
     steps:
       - name: Checkout Repo B (this repo)
         uses: actions/checkout@v4
-        with:
-          repository: AmanjotSinghSaini-int/ci-templates
-          ref: improvement
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
