@@ -97,7 +97,7 @@ on:
 
     secrets:
       SLACK_WEBHOOK_URL:
-        required: true
+        required: false
       AWS_ACCESS_KEY_ID:
         required: true
       AWS_SECRET_ACCESS_KEY:
@@ -107,7 +107,7 @@ on:
       AWS_ACCOUNT_ID:
         required: true
       SONAR_TOKEN:
-        required: true
+        required: false
 
 jobs:
   gitleaks_scan:
