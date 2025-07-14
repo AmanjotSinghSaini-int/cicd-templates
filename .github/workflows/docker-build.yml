@@ -366,12 +366,15 @@ jobs:
       id: outcome
       run: |
         result="${{ needs.push_to_ecr.result }}"
-        if [[ "$result" == "failure" || "$result" == "skipped" ]]; then
-          echo "status=failure" >> $GITHUB_OUTPUT
-        elif [[ "$result" == "cancelled" ]]; then
+        echo "Result from push_to_ecr: $result"
+
+        if [[ -z "$result" ]]; then
           echo "status=cancelled" >> $GITHUB_OUTPUT
+        elif [[ "$result" == "failure" || "$result" == "skipped" ]]; then
+          echo "status=failure" >> $GITHUB_OUTPUT
         else
           echo "status=success" >> $GITHUB_OUTPUT
+        fi
 
     - name: Send Slack notification
       if: ${{ inputs.slack-enabled }}
@@ -380,4 +383,3 @@ jobs:
         webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
         channel: ${{ inputs.slack-channel }}
         status: ${{ steps.outcome.outputs.status }}
-
