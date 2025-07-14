@@ -6,6 +6,10 @@ on:
       image_name:
         required: true
         type: string
+      image_tag:
+        required: false
+        type: string
+        default: 'latest'
       dockerfile_path:
         required: false
         type: string
@@ -26,7 +30,6 @@ on:
         required: false
         type: boolean
         default: true
-        
       run_gitleaks:
         required: false
         type: boolean
@@ -39,7 +42,6 @@ on:
         required: false
         type: boolean
         default: true
-        
       run_pytest:
         required: false
         type: boolean
@@ -48,7 +50,6 @@ on:
         required: false
         type: boolean
         default: false
-
       run_owasp:
         required: false
         type: boolean
@@ -57,17 +58,14 @@ on:
         required: false
         type: boolean
         default: true
-
       image_size_threshold_mb:
         required: false
         type: number
         default: 100
-
       continue_on_size_check_error:
         required: false
         type: boolean
         default: false
-
       push_to_ecr:
         required: false
         type: boolean
@@ -75,7 +73,6 @@ on:
       ecr_repository:
         required: false
         type: string
-
       run_sonar:
         required: false
         type: boolean
@@ -89,7 +86,6 @@ on:
       sonar_project_name:
         required: false
         type: string
-
       slack-channel:
         required: false
         type: string
@@ -148,24 +144,23 @@ jobs:
     needs: [gitleaks_scan]
     continue-on-error: ${{ inputs.continue_on_pytest_error }}
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
 
-    - run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest pytest-html
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-html
 
-    - run: pytest --html=pytest-report.html
+      - run: pytest --html=pytest-report.html
 
-    - uses: actions/upload-artifact@v4
-      with:
-        name: pytest-html-report
-        path: pytest-report.html
-
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pytest-html-report
+          path: pytest-report.html
 
   owasp_scan:
     runs-on: ubuntu-latest
@@ -173,8 +168,7 @@ jobs:
     if: ${{ inputs.run_owasp }}
     continue-on-error: ${{ inputs.continue_on_owasp_error }}
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Run OWASP Dependency Check
         uses: dependency-check/Dependency-Check_Action@main
@@ -184,22 +178,19 @@ jobs:
           format: "HTML"
           out: "dependency-check-reports"
 
-      - name: Upload OWASP HTML report
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: dependency-check-html-report
           path: dependency-check-reports/dependency-check-report.html
 
   sonarqube_scan:
-      runs-on: ubuntu-latest
-      needs: [owasp_scan]
-      if: ${{ inputs.run_sonar }}
-      steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
+    runs-on: ubuntu-latest
+    needs: [owasp_scan]
+    if: ${{ inputs.run_sonar }}
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
@@ -215,8 +206,8 @@ jobs:
             -Dsonar.projectKey=${{ inputs.sonar_project_key }} \
             -Dsonar.projectName="${{ inputs.sonar_project_name }}" \
             -Dsonar.host.url=${{ inputs.sonar_host_url }} \
-            -Dsonar.login=$SONAR_TOKEN
-
+            -Dsonar.login=$SONAR_TOKEN \
+            -Dsonar.projectVersion=${{ inputs.image_tag }}
 
   docker_build:
     runs-on: ubuntu-latest
@@ -224,8 +215,7 @@ jobs:
     outputs:
       image_name: ${{ inputs.image_name }}
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -234,25 +224,23 @@ jobs:
         run: |
           IMAGE_NAME="${{ inputs.image_name }}"
           BASE_NAME=$(basename "${IMAGE_NAME}" | cut -d':' -f1)
-          TAR_NAME="${BASE_NAME//[^a-zA-Z0-9]/_}.tar"
+          TAR_NAME="${BASE_NAME//[^a-zA-Z0-9]/_}_${{ inputs.image_tag }}.tar"
           echo "tar_name=$TAR_NAME" >> $GITHUB_OUTPUT
 
       - name: Build Docker image
         run: |
-          echo "Building Docker image: ${{ inputs.image_name }}"
           docker build \
-            -t ${{ inputs.image_name }} \
+            -t ${{ inputs.image_name }}:${{ inputs.image_tag }} \
             -f ${{ inputs.dockerfile_path }} \
             ${{ inputs.build_args }} \
             ${{ inputs.context }}
 
       - name: Save Docker image to archive
-        run: docker save -o ${{ steps.image_vars.outputs.tar_name }} ${{ inputs.image_name }}
+        run: docker save -o ${{ steps.image_vars.outputs.tar_name }} ${{ inputs.image_name }}:${{ inputs.image_tag }}
 
-      - name: Upload image as artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: built-docker-image
+          name: built-docker-image-${{ inputs.image_tag }}
           path: ${{ steps.image_vars.outputs.tar_name }}
 
   trivy_scan:
@@ -261,37 +249,32 @@ jobs:
     needs: docker_build
     continue-on-error: ${{ inputs.continue_on_trivy_error }}
     steps:
-      - name: Download image
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          name: built-docker-image
-
-      - name: Extract image base name
-        id: image_vars
-        run: |
-          IMAGE_NAME="${{ inputs.image_name }}"
-          BASE_NAME=$(basename "${IMAGE_NAME}" | cut -d':' -f1)
-          TAR_NAME="${BASE_NAME//[^a-zA-Z0-9]/_}.tar"
-          echo "tar_name=$TAR_NAME" >> $GITHUB_OUTPUT
+          name: built-docker-image-${{ inputs.image_tag }}
 
       - name: Load Docker image
-        run: docker load -i ${{ steps.image_vars.outputs.tar_name }}
+        run: |
+          IMAGE_NAME="${{ inputs.image_name }}"
+          TAG="${{ inputs.image_tag }}"
+          BASE_NAME=$(basename "${IMAGE_NAME}" | cut -d':' -f1)
+          TAR_NAME="${BASE_NAME//[^a-zA-Z0-9]/_}_${TAG}.tar"
+          docker load -i "$TAR_NAME"
 
-      - name: Trivy scan inside Docker
+      - name: Trivy scan
         run: |
           mkdir -p trivy-reports
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v ${{ github.workspace }}/trivy-reports:/output \
             aquasec/trivy:latest \
-            image ${{ inputs.image_name }} \
+            image ${{ inputs.image_name }}:${{ inputs.image_tag }} \
             --format table \
             --ignore-unfixed \
             --vuln-type os,library \
             -o /output/trivy-report.txt
 
-      - name: Upload Trivy Report
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: trivy-report
           path: trivy-reports/trivy-report.txt
@@ -303,42 +286,33 @@ jobs:
       pass_size_check: ${{ steps.check_size.outputs.pass_size_check }}
     continue-on-error: ${{ inputs.continue_on_size_check_error }}
     steps:
-      - name: Download Docker image artifact
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          name: built-docker-image
-
-      - name: Extract image base name
-        id: image_vars
-        run: |
-          IMAGE_NAME="${{ inputs.image_name }}"
-          BASE_NAME=$(basename "${IMAGE_NAME}" | cut -d':' -f1)
-          TAR_NAME="${BASE_NAME//[^a-zA-Z0-9]/_}.tar"
-          echo "tar_name=$TAR_NAME" >> $GITHUB_OUTPUT
+          name: built-docker-image-${{ inputs.image_tag }}
 
       - name: Load Docker image
-        run: docker load -i ${{ steps.image_vars.outputs.tar_name }}
-
-      - name: Check Docker image size
-        id: check_size
         run: |
           IMAGE_NAME="${{ inputs.image_name }}"
-          IMAGE_SIZE=$(docker image inspect "$IMAGE_NAME" --format='{{.Size}}')
+          TAG="${{ inputs.image_tag }}"
+          BASE_NAME=$(basename "${IMAGE_NAME}" | cut -d':' -f1)
+          TAR_NAME="${BASE_NAME//[^a-zA-Z0-9]/_}_${TAG}.tar"
+          docker load -i "$TAR_NAME"
+
+      - id: check_size
+        run: |
+          IMAGE_SIZE=$(docker image inspect "${{ inputs.image_name }}:${{ inputs.image_tag }}" --format='{{.Size}}')
           SIZE_MB=$((IMAGE_SIZE / 1024 / 1024))
           THRESHOLD=${{ inputs.image_size_threshold_mb }}
           echo "Image size is ${SIZE_MB} MB (Threshold: ${THRESHOLD} MB)"
-
           if [ "$SIZE_MB" -le "$THRESHOLD" ]; then
             echo "pass_size_check=true" >> $GITHUB_OUTPUT
           else
             echo "pass_size_check=false" >> $GITHUB_OUTPUT
-            echo "Image exceeds threshold. Blocking ECR push."
             if [ "${{ inputs.continue_on_size_check_error }}" != "true" ]; then
               exit 1
             fi
           fi
 
- 
   push_to_ecr:
     runs-on: ubuntu-latest
     needs: [trivy_scan, docker_image_size_check]
@@ -350,28 +324,23 @@ jobs:
           inputs.continue_on_size_check_error
         )
       }}
-
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
     steps:
-      - name: Download Docker image artifact
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          name: built-docker-image
-
-      - name: Extract image base name
-        id: image_vars
-        run: |
-          IMAGE_NAME="${{ inputs.image_name }}"
-          BASE_NAME=$(basename "${IMAGE_NAME}" | cut -d':' -f1)
-          TAR_NAME="${BASE_NAME//[^a-zA-Z0-9]/_}.tar"
-          echo "tar_name=$TAR_NAME" >> $GITHUB_OUTPUT
+          name: built-docker-image-${{ inputs.image_tag }}
 
       - name: Load Docker image
-        run: docker load -i ${{ steps.image_vars.outputs.tar_name }}
+        run: |
+          IMAGE_NAME="${{ inputs.image_name }}"
+          TAG="${{ inputs.image_tag }}"
+          BASE_NAME=$(basename "${IMAGE_NAME}" | cut -d':' -f1)
+          TAR_NAME="${BASE_NAME//[^a-zA-Z0-9]/_}_${TAG}.tar"
+          docker load -i "$TAR_NAME"
 
       - name: Log in to AWS ECR
         uses: aws-actions/amazon-ecr-login@v1
@@ -380,9 +349,8 @@ jobs:
 
       - name: Tag image for AWS ECR
         run: |
-          ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-          ECR_IMAGE="${ECR_REGISTRY}/${{ inputs.ecr_repository }}:latest"
-          docker tag ${{ inputs.image_name }} $ECR_IMAGE
+          ECR_IMAGE="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${{ inputs.ecr_repository }}:${{ inputs.image_tag }}"
+          docker tag ${{ inputs.image_name }}:${{ inputs.image_tag }} $ECR_IMAGE
           echo "ECR_IMAGE=$ECR_IMAGE" >> $GITHUB_ENV
 
       - name: Push to AWS ECR
@@ -392,22 +360,21 @@ jobs:
     runs-on: ubuntu-latest
     needs: [push_to_ecr]
     if: always()
-
     steps:
-    - name: Determine job outcome
-      id: outcome
-      run: |
-        result="${{ needs.push_to_ecr.result }}"
-        if [[ "$result" == "failure" || "$result" == "skipped" ]]; then
-          echo "status=failure" >> $GITHUB_OUTPUT
-        else
-          echo "status=success" >> $GITHUB_OUTPUT
-        fi
+      - name: Determine job outcome
+        id: outcome
+        run: |
+          result="${{ needs.push_to_ecr.result }}"
+          if [[ "$result" == "failure" || "$result" == "skipped" ]]; then
+            echo "status=failure" >> $GITHUB_OUTPUT
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+          fi
 
-    - name: Send Slack notification
-      if: ${{ inputs.slack-enabled }}
-      uses: act10ns/slack@v1
-      with:
-        webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
-        channel: ${{ inputs.slack-channel }}
-        status: ${{ steps.outcome.outputs.status }}
+      - name: Send Slack notification
+        if: ${{ inputs.slack-enabled }}
+        uses: act10ns/slack@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          channel: ${{ inputs.slack-channel }}
+          status: ${{ steps.outcome.outputs.status }}
