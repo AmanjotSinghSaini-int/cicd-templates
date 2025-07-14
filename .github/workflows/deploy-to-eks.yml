@@ -43,7 +43,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repo B (this repo)
+      - name: Checkout Repo 
         uses: actions/checkout@v4
 
       - name: Configure AWS credentials
