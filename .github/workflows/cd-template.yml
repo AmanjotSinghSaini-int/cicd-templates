@@ -12,7 +12,7 @@ on:
       deployment_mode:
         required: false
         type: string
-        default: 'singlefile'
+        default: 'singlefile'  # Options: singlefile, filenames, recursive
       deployment_file:
         required: false
         type: string
@@ -30,6 +30,7 @@ on:
         type: boolean
         default: false
 
+
     secrets:
       AWS_ACCESS_KEY_ID:
         required: true
@@ -39,15 +40,13 @@ on:
         required: true
 
 jobs:
-  setup:
+  deploy:
     runs-on: ubuntu-latest
-    outputs:
-      region: ${{ steps.export-region.outputs.region }}
     steps:
-      - name: Checkout Repo
+      - name: Checkout Repo 
         uses: actions/checkout@v4
 
-      - name: Configure AWS Credentials
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -60,16 +59,6 @@ jobs:
             --name ${{ inputs.eks_cluster_name }} \
             --region ${{ secrets.AWS_REGION }}
 
-      - name: Export Region
-        id: export-region
-        run: echo "region=${{ secrets.AWS_REGION }}" >> $GITHUB_OUTPUT
-
-  resolve-image:
-    runs-on: ubuntu-latest
-    needs: setup
-    outputs:
-      image_tag: ${{ steps.get-tag.outputs.image_tag }}
-    steps:
       - name: Get latest ECR image tag
         id: get-tag
         run: |
@@ -78,91 +67,107 @@ jobs:
             --region ${{ secrets.AWS_REGION }} \
             --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags[0]' \
             --output text)
+          echo "Latest ECR tag: $IMAGE_TAG"
           echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-  generate-manifests:
-    runs-on: ubuntu-latest
-    needs: [setup, resolve-image]
-    outputs:
-      manifest_dir: ${{ steps.set-output.outputs.dir }}
-    steps:
       - name: Substitute {{IMAGE}} placeholder
-        id: set-output
         run: |
-          IMAGE="${{ inputs.ecr_repo }}:${{ needs.resolve-image.outputs.image_tag }}"
+          IMAGE="${{ inputs.ecr_repo }}:${{ steps.get-tag.outputs.image_tag }}"
           echo "Using image: $IMAGE"
 
           if [ "${{ inputs.deployment_mode }}" = "singlefile" ]; then
             sed "s|{{IMAGE}}|$IMAGE|g" ${{ inputs.deployment_file }} > final-deployment.yaml
-            echo "Processed single file."
-            echo "dir=." >> $GITHUB_OUTPUT
+            echo "Processed single file: final-deployment.yaml"
 
           elif [ "${{ inputs.deployment_mode }}" = "filenames" ]; then
             IFS=',' read -ra FILES <<< "${{ inputs.deployment_files }}"
             mkdir -p final-files
             for file in "${FILES[@]}"; do
-              sed "s|{{IMAGE}}|$IMAGE|g" "$file" > "final-files/$(basename "$file")"
+              fname=$(basename "$file")
+              sed "s|{{IMAGE}}|$IMAGE|g" "$file" > "final-files/$fname"
+              echo "Processed: $file → final-files/$fname"
             done
-            echo "dir=final-files" >> $GITHUB_OUTPUT
 
           elif [ "${{ inputs.deployment_mode }}" = "recursive" ]; then
-            mkdir -p final-recursive
-            find ./k8s -type f -name '*.yaml' | while read -r file; do
-              relpath=$(realpath --relative-to=. "$file")
-              mkdir -p "final-recursive/$(dirname "$relpath")"
-              sed "s|{{IMAGE}}|$IMAGE|g" "$file" > "final-recursive/$relpath"
-            done
-            echo "dir=final-recursive" >> $GITHUB_OUTPUT
+          mkdir -p final-recursive
+          find ./k8s -type f -name '*.yaml' | while read -r file; do
+            relpath=$(realpath --relative-to=. "$file")
+            mkdir -p "final-recursive/$(dirname "$relpath")"
+            sed "s|{{IMAGE}}|$IMAGE|g" "$file" > "final-recursive/$relpath"
+            echo "Processed: $file → final-recursive/$relpath"
+          done
 
-  deploy:
-    runs-on: ubuntu-latest
-    needs: generate-manifests
-    steps:
-      - name: Apply Manifests to EKS
+          else
+            echo "Unknown deployment mode: ${{ inputs.deployment_mode }}"
+            exit 1
+          fi
+
+      - name: Deploy to EKS
         run: |
-          echo "Applying manifests from ${{ needs.generate-manifests.outputs.manifest_dir }}"
-          kubectl apply -R -f ${{ needs.generate-manifests.outputs.manifest_dir }}
+          echo "Deployment mode: ${{ inputs.deployment_mode }}"
 
-  validate:
-    runs-on: ubuntu-latest
-    needs: deploy
-    if: always()
-    continue-on-error: ${{ inputs.continue_on_validation_error }}
-    steps:
+          if [ "${{ inputs.deployment_mode }}" = "singlefile" ]; then
+            echo "Applying single file: final-deployment.yaml"
+            kubectl apply -f final-deployment.yaml
+
+          elif [ "${{ inputs.deployment_mode }}" = "filenames" ]; then
+          for file in final-files/*.yaml; do
+            echo "Applying file: $file"
+            kubectl apply -f "$file"
+          done
+
+          elif [ "${{ inputs.deployment_mode }}" = "recursive" ]; then
+          echo "Applying all YAML files recursively from final-recursive/"
+          kubectl apply -R -f final-recursive
+
+          else
+            echo "Invalid deployment_mode: ${{ inputs.deployment_mode }}"
+            exit 1
+          fi
+
+      - name: Force rollout restart
+        run: |
+          kubectl rollout restart deployment my-app
+
+
       - name: Validate rollout is successful
+        continue-on-error: ${{ inputs.continue_on_validation_error }}
         run: |
           MAX_RETRIES=5
           RETRY_INTERVAL=30
           RETRIES=0
+
           DEPLOYMENT_NAME="my-app"
           NAMESPACE="default"
 
           while [ $RETRIES -lt $MAX_RETRIES ]; do
+            echo "Checking rollout status (Attempt $((RETRIES + 1))/$MAX_RETRIES)..."
             STATUS=$(kubectl rollout status deployment/$DEPLOYMENT_NAME -n $NAMESPACE --timeout=10s || true)
+
             echo "$STATUS"
 
             if [[ "$STATUS" == *"successfully rolled out"* ]]; then
               echo "Deployment is healthy."
               exit 0
             else
+              echo "Deployment not healthy yet. Retrying in $RETRY_INTERVAL seconds..."
               sleep $RETRY_INTERVAL
               RETRIES=$((RETRIES + 1))
             fi
           done
 
-          echo "Deployment failed after $MAX_RETRIES attempts."
+          echo "Deployment did not become healthy after $MAX_RETRIES retries."
           exit 1
 
-  cleanup-ecr:
-    runs-on: ubuntu-latest
-    needs: setup
-    if: ${{ inputs.delete_old_images == true }}
-    steps:
-      - name: Prune old and untagged ECR images
+      - name: Prune old ECR images (keep latest 5 + delete untagged)
+        if: ${{ inputs.delete_old_images == true }}
         run: |
+          set -e
           REPO_NAME=$(basename ${{ inputs.ecr_repo }})
           REGION=${{ secrets.AWS_REGION }}
           IMAGES_TO_KEEP=5
+
+          echo "Fetching all tagged image details from ECR: $REPO_NAME"
 
           TAGGED_IMAGE_DETAILS=$(aws ecr describe-images \
             --repository-name "$REPO_NAME" \
@@ -173,16 +178,21 @@ jobs:
           TAGGED_IMAGE_COUNT=$(echo "$TAGGED_IMAGE_DETAILS" | jq length)
 
           if [ "$TAGGED_IMAGE_COUNT" -le "$IMAGES_TO_KEEP" ]; then
-            echo "Only $TAGGED_IMAGE_COUNT tagged image(s) found. Skipping prune."
+            echo "Only $TAGGED_IMAGE_COUNT tagged image(s) found — no pruning of tagged images needed."
           else
+            echo "Pruning old tagged images..."
             DIGESTS_TO_DELETE=$(echo "$TAGGED_IMAGE_DETAILS" | jq -r ".[0:($TAGGED_IMAGE_COUNT - $IMAGES_TO_KEEP)] | .[].imageDigest")
+
             for DIGEST in $DIGESTS_TO_DELETE; do
+              echo "Deleting tagged image digest: $DIGEST"
               aws ecr batch-delete-image \
                 --repository-name "$REPO_NAME" \
                 --region "$REGION" \
                 --image-ids imageDigest=$DIGEST
             done
           fi
+
+          echo "Checking for untagged images..."
 
           UNTAGGED_IMAGES=$(aws ecr list-images \
             --repository-name "$REPO_NAME" \
@@ -191,11 +201,14 @@ jobs:
             --query 'imageIds[*]' \
             --output json)
 
-          if [ "$(echo "$UNTAGGED_IMAGES" | jq length)" -gt 0 ]; then
+          if [ "$(echo "$UNTAGGED_IMAGES" | jq length)" -eq 0 ]; then
+            echo "No untagged images to delete."
+          else
+            echo "Deleting untagged images..."
             aws ecr batch-delete-image \
               --repository-name "$REPO_NAME" \
               --region "$REGION" \
               --image-ids "$UNTAGGED_IMAGES"
           fi
 
-          echo "ECR cleanup complete."
+          echo "ECR image pruning complete."
