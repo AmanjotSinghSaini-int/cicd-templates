@@ -14,4 +14,4 @@ These templates are meant to be **called using `workflow_call`** from GitHub Act
 ```yaml
 jobs:
   build:
-    uses: your-org/cicd-templates/.github/workflows/docker-build.yml@main
+    uses: your-org/cicd-templates/.github/workflows/ci-template.yml@main
