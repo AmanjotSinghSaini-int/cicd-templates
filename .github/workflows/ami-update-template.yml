@@ -233,7 +233,7 @@ jobs:
       - name: Resume ASG Processes
         if: ${{ always() && inputs.resume_asg_processes == true && inputs.processes_to_resume != '' }}
         run: |
-          PROCESSES="${{ inputs.processes_to_to_resume }}" # Corrected typo: processes_to_to_resume -> processes_to_resume
+          PROCESSES="${{ inputs.processes_to_resume }}" # Corrected typo: processes_to_to_resume -> processes_to_resume
           aws autoscaling resume-processes \
             --auto-scaling-group-name "$ASG_NAME" \
             --region "$AWS_REGION" \
