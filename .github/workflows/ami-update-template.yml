@@ -1,0 +1,240 @@
+name: AMI Update Reusable Workflow
+on:
+  workflow_call: # This makes the workflow reusable
+    inputs:
+      # --- AWS & AMI Parameters ---
+      region:
+        required: true
+        type: string
+      launch_template_id:
+        required: true
+        type: string
+      new_ami_id:
+        required: true
+        type: string
+      asg_name:
+        required: true
+        type: string
+      aws_iam_role_arn: # Used for OIDC authentication
+        required: true
+        type: string
+      # --- ASG Scaling Parameters ---
+      update_asg_capacity:
+        required: false
+        type: boolean
+        default: true
+      min_size:
+        required: false
+        type: number
+        default: 1
+      max_size:
+        required: false
+        type: number
+        default: 5
+      desired_capacity:
+        required: false
+        type: number
+        default: 3
+      default_cooldown:
+        required: false
+        type: number
+        default: 300
+      # --- ASG Health Check Parameters ---
+      update_asg_health_check:
+        required: false
+        type: boolean
+        default: true
+      health_check_type:
+        required: false
+        type: string
+        default: 'EC2'
+      health_check_grace_period:
+        required: false
+        type: number
+        default: 300
+      # --- Instance Refresh Parameters ---
+      enable_instance_refresh:
+        required: false
+        type: boolean
+        default: true
+      instance_refresh_strategy:
+        required: false
+        type: string
+        default: 'Rolling'
+      instance_refresh_min_healthy_percentage:
+        required: false
+        type: number
+        default: 90
+      instance_refresh_instance_warmup:
+        required: false
+        type: number
+        default: 300
+      instance_refresh_auto_rollback:
+        required: false
+        type: boolean
+        default: true
+      instance_refresh_checkpoints:
+        required: false
+        type: string
+        default: ''
+      instance_refresh_skip_matching:
+        required: false
+        type: boolean
+        default: false
+      # --- ASG Process Management (Suspend/Resume) ---
+      suspend_asg_processes:
+        required: false
+        type: boolean
+        default: false
+      processes_to_suspend:
+        required: false
+        type: string
+        default: ''
+      resume_asg_processes:
+        required: false
+        type: boolean
+        default: false
+      processes_to_resume:
+        required: false
+        type: string
+        default: ''
+      # --- Instance Protection ---
+      enable_instance_protection:
+        required: false
+        type: boolean
+        default: false
+jobs:
+  ami_update_job:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # Required for OIDC
+      contents: read # Required to checkout code
+    env: # Define common environment variables from inputs for easier access in steps
+      AWS_REGION: ${{ inputs.region }}
+      ASG_NAME: ${{ inputs.asg_name }}
+      LAUNCH_TEMPLATE_ID: ${{ inputs.launch_template_id }}
+      NEW_AMI_ID: ${{ inputs.new_ami_id }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.aws_iam_role_arn }} # Use the passed ARN
+          role-session-name: GitHubActionsAMIUpdateSession
+          aws-region: ${{ env.AWS_REGION }}
+      # Stage: Suspend ASG Processes
+      - name: Suspend ASG Processes
+        if: ${{ inputs.suspend_asg_processes == true && inputs.processes_to_suspend != '' }}
+        run: |
+          PROCESSES="${{ inputs.processes_to_suspend }}"
+          aws autoscaling suspend-processes \
+            --auto-scaling-group-name "$ASG_NAME" \
+            --region "$AWS_REGION" \
+            --scaling-processes $(echo "$PROCESSES" | tr ',' ' ')
+      # Stage: Update Launch Template
+      - name: Update Launch Template
+        run: |
+          aws ec2 create-launch-template-version \
+            --launch-template-id "$LAUNCH_TEMPLATE_ID" \
+            --source-version 1 \
+            --launch-template-data '{"ImageId":"${{ env.NEW_AMI_ID }}"}' \
+            --region "$AWS_REGION"
+      # Stage: Update ASG Configuration
+      - name: Update ASG Configuration
+        run: |
+          UPDATE_ASG_CMD="aws autoscaling update-auto-scaling-group \
+            --auto-scaling-group-name \"$ASG_NAME\" \
+            --region \"$AWS_REGION\" \
+            --launch-template \"LaunchTemplateId=$LAUNCH_TEMPLATE_ID,Version=\\\$Latest\""
+          if ${{ inputs.update_asg_capacity == true }}; then
+            if [[ -n "${{ inputs.min_size }}" ]]; then UPDATE_ASG_CMD+=" --min-size ${{ inputs.min_size }}"; fi
+            if [[ -n "${{ inputs.max_size }}" ]]; then UPDATE_ASG_CMD+=" --max-size ${{ inputs.max_size }}"; fi
+            if [[ -n "${{ inputs.desired_capacity }}" ]]; then UPDATE_ASG_CMD+=" --desired-capacity ${{ inputs.desired_capacity }}"; fi
+            if [[ -n "${{ inputs.default_cooldown }}" ]]; then UPDATE_ASG_CMD+=" --default-cooldown ${{ inputs.default_cooldown }}"; fi
+          fi
+          if ${{ inputs.update_asg_health_check == true }}; then
+            if [[ -n "${{ inputs.health_check_type }}" ]]; then UPDATE_ASG_CMD+=" --health-check-type ${{ inputs.health_check_type }}"; fi
+            if [[ -n "${{ inputs.health_check_grace_period }}" ]]; then UPDATE_ASG_CMD+=" --health-check-grace-period ${{ inputs.health_check_grace_period }}"; fi
+          fi
+          if ${{ inputs.enable_instance_protection == true }}; then
+            UPDATE_ASG_CMD+=" --new-instances-protected-from-scale-in"
+          fi
+          echo "Running ASG update command: $UPDATE_ASG_CMD"
+          eval "$UPDATE_ASG_CMD"
+      # Stage: Trigger Instance Refresh
+      - name: Trigger Instance Refresh
+        if: ${{ inputs.enable_instance_refresh == true }}
+        run: |
+          REFRESH_CMD="aws autoscaling start-instance-refresh \
+            --auto-scaling-group-name \"$ASG_NAME\" \
+            --region \"$AWS_REGION\" \
+            --strategy ${{ inputs.instance_refresh_strategy }}"
+          PREFERENCES=""
+          if [[ -n "${{ inputs.instance_refresh_min_healthy_percentage }}" ]]; then
+            PREFERENCES+=",MinHealthyPercentage=${{ inputs.instance_refresh_min_healthy_percentage }}"
+          fi
+          if [[ -n "${{ inputs.instance_refresh_instance_warmup }}" ]]; then
+            PREFERENCES+=",InstanceWarmup=${{ inputs.instance_refresh_instance_warmup }}"
+          fi
+          if ${{ inputs.instance_refresh_skip_matching == true }}; then
+            PREFERENCES+=",SkipMatching=true"
+          fi
+          if [[ -n "${{ inputs.instance_refresh_checkpoints }}" && "${{ inputs.instance_refresh_strategy }}" == "Checkpoints" ]]; then
+            PREFERENCES+=",Checkpoints=[${{ inputs.instance_refresh_checkpoints }}]"
+          fi
+          if ${{ inputs.instance_refresh_auto_rollback == true }}; then
+            PREFERENCES+=",AutoRollback=true"
+            REFRESH_CMD+=" --desired-configuration '{\"LaunchTemplate\":{\"LaunchTemplateId\":\"$LAUNCH_TEMPLATE_ID\",\"Version\":\"\\\$Latest\"}}'"
+          fi
+          if [[ "${PREFERENCES:0:1}" == "," ]]; then
+            PREFERENCES="${PREFERENCES:1}"
+          fi
+          if [[ -n "$PREFERENCES" ]]; then
+            REFRESH_CMD+=" --preferences \"$PREFERENCES\""
+          fi
+          echo "Running instance refresh command: $REFRESH_CMD"
+          eval "$REFRESH_CMD"
+      # Stage: Monitor Instance Refresh
+      - name: Monitor Instance Refresh
+        if: ${{ inputs.enable_instance_refresh == true }}
+        timeout-minutes: 60
+        run: |
+          ASG_NAME="${{ env.ASG_NAME }}"
+          AWS_REGION="${{ env.AWS_REGION }}"
+          MAX_RETRIES=120
+          RETRY_INTERVAL=30
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Checking instance refresh status (attempt $i/$MAX_RETRIES)..."
+            STATUS=$(aws autoscaling describe-instance-refreshes \
+              --auto-scaling-group-name "$ASG_NAME" \
+              --query 'InstanceRefreshes[0].Status' \
+              --output text \
+              --region "$AWS_REGION" 2>/dev/null || echo "Unknown")
+            echo "Instance Refresh Status: $STATUS"
+            case "$STATUS" in
+              "Successful"|"RollbackSuccessful")
+                echo "Instance refresh completed successfully or rolled back successfully."
+                exit 0
+                ;;
+              "Failed"|"Cancelled"|"RollbackFailed")
+                echo "Instance refresh ${STATUS} for ASG ${ASG_NAME}."
+                exit 1
+                ;;
+              *)
+                echo "Waiting for instance refresh to complete..."
+                sleep "$RETRY_INTERVAL"
+                ;;
+            esac
+          done
+          echo "Timeout: Instance refresh did not complete within the allotted time."
+          exit 1
+      # Stage: Resume ASG Processes (Always runs, even on failure)
+      - name: Resume ASG Processes
+        if: ${{ always() && inputs.resume_asg_processes == true && inputs.processes_to_resume != '' }}
+        run: |
+          PROCESSES="${{ inputs.processes_to_to_resume }}" # Corrected typo: processes_to_to_resume -> processes_to_resume
+          aws autoscaling resume-processes \
+            --auto-scaling-group-name "$ASG_NAME" \
+            --region "$AWS_REGION" \
+            --scaling-processes $(echo "$PROCESSES" | tr ',' ' ')
