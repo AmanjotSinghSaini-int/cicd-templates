@@ -197,6 +197,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [owasp_scan]
     if: ${{ inputs.run_sonar == true || inputs.run_sonar == 'true' }}
+
     steps:
     - uses: actions/checkout@v4
 
@@ -217,9 +218,12 @@ jobs:
           -Dsonar.projectKey=${{ inputs.sonar_project_key }} \
           -Dsonar.projectName="${{ inputs.sonar_project_name }}" \
           -Dsonar.host.url=${{ inputs.sonar_host_url }} \
-          -Dsonar.login=$SONAR_TOKEN
+          -Dsonar.login=$SONAR_TOKEN \
+          -Dsonar.coverage.exclusions="**/test/**,**/tests/**" \
+          -Dsonar.sourceEncoding=UTF-8 \
+          -Dsonar.scm.disabled=true
 
-    - name: 🕒 Wait before checking Quality Gate
+    - name: 🕒 Wait for SonarQube Quality Gate Analysis
       if: ${{ inputs.fail_on_quality_gate == true || inputs.fail_on_quality_gate == 'true' }}
       run: sleep 10
 
@@ -232,9 +236,6 @@ jobs:
       run: |
         echo "🔍 Requesting recent analysis list..."
         RESPONSE=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/project_analyses/search?project=$PROJECT_KEY")
-        echo "🔧 Raw response:"
-        echo "$RESPONSE" | jq
-
         ANALYSIS_ID=$(echo "$RESPONSE" | jq -r '.analyses[0].key')
 
         if [ -z "$ANALYSIS_ID" ] || [ "$ANALYSIS_ID" == "null" ]; then
@@ -245,7 +246,7 @@ jobs:
         echo "✅ Found analysis ID: $ANALYSIS_ID"
         echo "analysis_id=$ANALYSIS_ID" >> $GITHUB_OUTPUT
 
-    - name: ✅ Check SonarQube Quality Gate status
+    - name: ✅ Check SonarQube Quality Gate
       if: ${{ inputs.fail_on_quality_gate == true || inputs.fail_on_quality_gate == 'true' }}
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
