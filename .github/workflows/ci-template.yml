@@ -196,7 +196,7 @@ jobs:
   sonarqube_scan:
     runs-on: ubuntu-latest
     needs: [owasp_scan]
-    if: ${{ inputs.run_sonar == 'true' }}
+    if: ${{ inputs.run_sonar == true || inputs.run_sonar == 'true' }}
     steps:
     - uses: actions/checkout@v4
 
