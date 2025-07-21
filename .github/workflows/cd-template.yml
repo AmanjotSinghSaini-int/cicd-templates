@@ -106,7 +106,7 @@ jobs:
               -v ${{ github.workspace }}:/app \
               -w /app \
               bitnami/kubectl:latest \
-              kubectl apply -f final-deployment.yaml
+              apply -f final-deployment.yaml
 
           elif [ "${{ inputs.deployment_mode }}" = "filenames" ]; then
             for file in final-files/*.yaml; do
@@ -116,7 +116,7 @@ jobs:
                 -v ${{ github.workspace }}:/app \
                 -w /app \
                 bitnami/kubectl:latest \
-                kubectl apply -f "$file"
+                apply -f "$file"
             done
 
           elif [ "${{ inputs.deployment_mode }}" = "recursive" ]; then
@@ -126,7 +126,7 @@ jobs:
               -v ${{ github.workspace }}:/app \
               -w /app \
               bitnami/kubectl:latest \
-              kubectl apply -R -f final-recursive
+              apply -R -f final-recursive
 
           else
             echo "Invalid deployment_mode: ${{ inputs.deployment_mode }}"
@@ -139,7 +139,7 @@ jobs:
           docker run --rm \
             -v $HOME/.kube:/root/.kube \
             bitnami/kubectl:latest \
-            kubectl rollout restart deployment my-app
+            rollout restart deployment my-app
 
 
       - name: Validate rollout is successful (Dockerized kubectl)
@@ -154,7 +154,7 @@ jobs:
             STATUS=$(docker run --rm \
               -v $HOME/.kube:/root/.kube \
               bitnami/kubectl:latest \
-              kubectl rollout status deployment/my-app -n default --timeout=10s || true)
+              status deployment/my-app -n default --timeout=10s || true)
 
             echo "$STATUS"
 
