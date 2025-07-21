@@ -197,6 +197,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [owasp_scan]
     if: ${{ inputs.run_sonar == true || inputs.run_sonar == 'true' }}
+
     steps:
     - uses: actions/checkout@v4
 
@@ -219,6 +220,9 @@ jobs:
           -Dsonar.projectName="${{ inputs.sonar_project_name }}" \
           -Dsonar.host.url=${{ inputs.sonar_host_url }} \
           -Dsonar.login=$SONAR_TOKEN \
+          -Dsonar.sources=. \
+          -Dsonar.inclusions=**/* \
+          -X  # Optional: shows full debug logs
 
     - name: Wait for SonarQube Quality Gate result
       if: ${{ inputs.fail_on_quality_gate == true || inputs.fail_on_quality_gate == 'true' }}
@@ -234,12 +238,18 @@ jobs:
 
         if [[ -z "$ANALYSIS_ID" || "$ANALYSIS_ID" == "null" ]]; then
           echo "❌ Could not get analysis ID. Exiting."
+          echo "🔁 Trying to fallback to current analysis..."
+          ANALYSIS_ID=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/project_analyses/search?project=$PROJECT_KEY" | jq -r '.analyses[0].analysisId')
+        fi
+
+        if [[ -z "$ANALYSIS_ID" || "$ANALYSIS_ID" == "null" ]]; then
+          echo "❌ Still could not get analysis ID. Exiting."
           exit 1
         fi
 
-        echo "Got analysis ID: $ANALYSIS_ID"
-        STATUS="PENDING"
+        echo "✅ Got analysis ID: $ANALYSIS_ID"
 
+        STATUS="PENDING"
         for i in {1..10}; do
           STATUS=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/qualitygates/project_status?analysisId=$ANALYSIS_ID" | jq -r '.projectStatus.status')
           echo "Quality Gate Status: $STATUS"
@@ -284,6 +294,7 @@ jobs:
         else
           echo "✅ Coverage ($COVERAGE_INT%) meets or exceeds threshold."
         fi
+
 
 
   docker_build:
