@@ -95,38 +95,29 @@ jobs:
             exit 1
           fi
 
-      - name: Deploy to EKS (Dockerized kubectl)
+      - name: Deploy to EKS using Dockerized kubectl
         run: |
           echo "Deployment mode: ${{ inputs.deployment_mode }}"
 
+          KUBECTL="docker run --rm \
+            -v $HOME/.kube:/root/.kube \
+            -v ${{ github.workspace }}:/workdir \
+            -w /workdir \
+            bitnami/kubectl:latest"
+
           if [ "${{ inputs.deployment_mode }}" = "singlefile" ]; then
             echo "Applying single file: final-deployment.yaml"
-            docker run --rm \
-              -v $HOME/.kube:/root/.kube \
-              -v ${{ github.workspace }}:/app \
-              -w /app \
-              bitnami/kubectl:latest \
-              apply -f final-deployment.yaml
+            $KUBECTL apply -f final-deployment.yaml --validate=false
 
           elif [ "${{ inputs.deployment_mode }}" = "filenames" ]; then
             for file in final-files/*.yaml; do
               echo "Applying file: $file"
-              docker run --rm \
-                -v $HOME/.kube:/root/.kube \
-                -v ${{ github.workspace }}:/app \
-                -w /app \
-                bitnami/kubectl:latest \
-                apply -f "$file"
-            done
+              $KUBECTL apply -f "$file" --validate=false
+          done
 
           elif [ "${{ inputs.deployment_mode }}" = "recursive" ]; then
             echo "Applying all YAML files recursively from final-recursive/"
-            docker run --rm \
-              -v $HOME/.kube:/root/.kube \
-              -v ${{ github.workspace }}:/app \
-              -w /app \
-              bitnami/kubectl:latest \
-              apply -R -f final-recursive
+            $KUBECTL apply -R -f final-recursive --validate=false
 
           else
             echo "Invalid deployment_mode: ${{ inputs.deployment_mode }}"
