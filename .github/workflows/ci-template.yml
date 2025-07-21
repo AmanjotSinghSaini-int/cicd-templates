@@ -224,15 +224,18 @@ jobs:
         if: ${{ inputs.fail_on_quality_gate == true || inputs.fail_on_quality_gate == 'true' }}
         run: sleep 10
 
-      - name: 🔍 Get Analysis ID
-        if: ${{ inputs.fail_on_quality_gate == true || inputs.fail_on_quality_gate == 'true' }}
-        id: get-analysis-id
+      - name: 🐞 Debug SonarQube Analysis Response
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ inputs.sonar_host_url }}
           PROJECT_KEY: ${{ inputs.sonar_project_key }}
         run: |
-          ANALYSIS_ID=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/project_analyses/search?project=$PROJECT_KEY" | jq -r '.analyses[0].analysisId')
+          echo "🔍 Requesting recent analysis list..."
+          RESPONSE=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/project_analyses/search?project=$PROJECT_KEY")
+          echo "🔧 Raw response:"
+          echo "$RESPONSE" | jq
+
+          ANALYSIS_ID=$(echo "$RESPONSE" | jq -r '.analyses[0].analysisId')
 
           if [ -z "$ANALYSIS_ID" ] || [ "$ANALYSIS_ID" == "null" ]; then
             echo "❌ Could not get analysis ID. Exiting."
@@ -241,6 +244,7 @@ jobs:
 
           echo "✅ Found analysis ID: $ANALYSIS_ID"
           echo "analysis_id=$ANALYSIS_ID" >> $GITHUB_OUTPUT
+
 
       - name: ✅ Check SonarQube Quality Gate status
         if: ${{ inputs.fail_on_quality_gate == true || inputs.fail_on_quality_gate == 'true' }}
