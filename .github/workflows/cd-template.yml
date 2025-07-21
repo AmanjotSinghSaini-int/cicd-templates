@@ -76,6 +76,7 @@ jobs:
 
           if [ "${{ inputs.deployment_mode }}" = "singlefile" ]; then
             sed "s|{{IMAGE}}|$IMAGE|g" ${{ inputs.deployment_file }} > final-deployment.yaml
+
           elif [ "${{ inputs.deployment_mode }}" = "filenames" ]; then
             IFS=',' read -ra FILES <<< "${{ inputs.deployment_files }}"
             mkdir -p final-files
@@ -83,6 +84,7 @@ jobs:
               fname=$(basename "$file")
               sed "s|{{IMAGE}}|$IMAGE|g" "$file" > "final-files/$fname"
             done
+
           elif [ "${{ inputs.deployment_mode }}" = "recursive" ]; then
             mkdir -p final-recursive
             find ./k8s -type f -name '*.yaml' | while read -r file; do
@@ -90,6 +92,7 @@ jobs:
               mkdir -p "final-recursive/$(dirname "$relpath")"
               sed "s|{{IMAGE}}|$IMAGE|g" "$file" > "final-recursive/$relpath"
             done
+
           else
             echo "Unknown deployment mode: ${{ inputs.deployment_mode }}"
             exit 1
@@ -113,7 +116,7 @@ jobs:
             for file in final-files/*.yaml; do
               echo "Applying file: $file"
               $KUBECTL apply -f "$file" --validate=false
-          done
+            done
 
           elif [ "${{ inputs.deployment_mode }}" = "recursive" ]; then
             echo "Applying all YAML files recursively from final-recursive/"
@@ -124,14 +127,12 @@ jobs:
             exit 1
           fi
 
-
       - name: Force rollout restart (Dockerized kubectl)
         run: |
           docker run --rm \
             -v $HOME/.kube:/root/.kube \
             bitnami/kubectl:latest \
-            rollout restart deployment my-app
-
+            rollout restart deployment/my-app
 
       - name: Validate rollout is successful (Dockerized kubectl)
         continue-on-error: ${{ inputs.continue_on_validation_error }}
@@ -145,7 +146,7 @@ jobs:
             STATUS=$(docker run --rm \
               -v $HOME/.kube:/root/.kube \
               bitnami/kubectl:latest \
-              status deployment/my-app -n default --timeout=10s || true)
+              rollout status deployment/my-app -n default --timeout=10s || true)
 
             echo "$STATUS"
 
@@ -161,7 +162,6 @@ jobs:
 
           echo "Deployment did not become healthy after $MAX_RETRIES retries."
           exit 1
-
 
       - name: Prune old ECR images (keep latest 5 + delete untagged)
         if: ${{ inputs.delete_old_images == true }}
