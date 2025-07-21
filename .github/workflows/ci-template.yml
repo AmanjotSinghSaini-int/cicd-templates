@@ -221,7 +221,7 @@ jobs:
           -Dsonar.login=$SONAR_TOKEN \
 
     - name: Wait for SonarQube Quality Gate result
-      if: ${{ inputs.fail_on_quality_gate == 'true' }}
+      if: ${{ inputs.fail_on_quality_gate == true || inputs.fail_on_quality_gate == 'true' }}
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         SONAR_HOST_URL: ${{ inputs.sonar_host_url }}
@@ -257,7 +257,7 @@ jobs:
         fi
 
     - name: Check Code Coverage Threshold
-      if: ${{ inputs.fail_on_quality_gate == 'true' }}
+      if: ${{ inputs.fail_on_quality_gate == true || inputs.fail_on_quality_gate == 'true' }}
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         SONAR_HOST_URL: ${{ inputs.sonar_host_url }}
