@@ -12,7 +12,7 @@ on:
       deployment_mode:
         required: false
         type: string
-        default: 'singlefile'
+        default: 'singlefile'  # Options: singlefile, filenames, recursive
       deployment_file:
         required: false
         type: string
@@ -29,6 +29,7 @@ on:
         required: false
         type: boolean
         default: false
+
 
     secrets:
       AWS_ACCESS_KEY_ID:
@@ -76,6 +77,7 @@ jobs:
 
           if [ "${{ inputs.deployment_mode }}" = "singlefile" ]; then
             sed "s|{{IMAGE}}|$IMAGE|g" ${{ inputs.deployment_file }} > final-deployment.yaml
+            echo "Processed single file: final-deployment.yaml"
 
           elif [ "${{ inputs.deployment_mode }}" = "filenames" ]; then
             IFS=',' read -ra FILES <<< "${{ inputs.deployment_files }}"
@@ -83,81 +85,75 @@ jobs:
             for file in "${FILES[@]}"; do
               fname=$(basename "$file")
               sed "s|{{IMAGE}}|$IMAGE|g" "$file" > "final-files/$fname"
+              echo "Processed: $file → final-files/$fname"
             done
 
           elif [ "${{ inputs.deployment_mode }}" = "recursive" ]; then
-            mkdir -p final-recursive
-            find ./k8s -type f -name '*.yaml' | while read -r file; do
-              relpath=$(realpath --relative-to=. "$file")
-              mkdir -p "final-recursive/$(dirname "$relpath")"
-              sed "s|{{IMAGE}}|$IMAGE|g" "$file" > "final-recursive/$relpath"
-            done
+          mkdir -p final-recursive
+          find ./k8s -type f -name '*.yaml' | while read -r file; do
+            relpath=$(realpath --relative-to=. "$file")
+            mkdir -p "final-recursive/$(dirname "$relpath")"
+            sed "s|{{IMAGE}}|$IMAGE|g" "$file" > "final-recursive/$relpath"
+            echo "Processed: $file → final-recursive/$relpath"
+          done
 
           else
             echo "Unknown deployment mode: ${{ inputs.deployment_mode }}"
             exit 1
           fi
 
-      - name: Deploy to EKS using Dockerized kubectl
+      - name: Deploy to EKS
         run: |
           echo "Deployment mode: ${{ inputs.deployment_mode }}"
 
-          KUBECTL="docker run --rm \
-            -v $HOME/.kube:/root/.kube \
-            -v ${{ github.workspace }}:/workdir \
-            -w /workdir \
-            bitnami/kubectl:latest"
-
           if [ "${{ inputs.deployment_mode }}" = "singlefile" ]; then
             echo "Applying single file: final-deployment.yaml"
-            $KUBECTL apply -f final-deployment.yaml --validate=false
+            kubectl apply -f final-deployment.yaml
 
           elif [ "${{ inputs.deployment_mode }}" = "filenames" ]; then
-            for file in final-files/*.yaml; do
-              echo "Applying file: $file"
-              $KUBECTL apply -f "$file" --validate=false
-            done
+          for file in final-files/*.yaml; do
+            echo "Applying file: $file"
+            kubectl apply -f "$file"
+          done
 
           elif [ "${{ inputs.deployment_mode }}" = "recursive" ]; then
-            echo "Applying all YAML files recursively from final-recursive/"
-            $KUBECTL apply -R -f final-recursive --validate=false
+          echo "Applying all YAML files recursively from final-recursive/"
+          kubectl apply -R -f final-recursive
 
           else
             echo "Invalid deployment_mode: ${{ inputs.deployment_mode }}"
             exit 1
           fi
 
-      - name: Force rollout restart (Dockerized kubectl)
+      - name: Force rollout restart
         run: |
-          docker run --rm \
-            -v $HOME/.kube:/root/.kube \
-            bitnami/kubectl:latest \
-            rollout restart deployment/my-app
+          kubectl rollout restart deployment my-app
 
-      - name: Validate rollout is successful (Dockerized kubectl)
+
+      - name: Validate rollout is successful
         continue-on-error: ${{ inputs.continue_on_validation_error }}
         run: |
           MAX_RETRIES=5
           RETRY_INTERVAL=30
           RETRIES=0
 
+          DEPLOYMENT_NAME="my-app"
+          NAMESPACE="default"
+
           while [ $RETRIES -lt $MAX_RETRIES ]; do
             echo "Checking rollout status (Attempt $((RETRIES + 1))/$MAX_RETRIES)..."
-            STATUS=$(docker run --rm \
-              -v $HOME/.kube:/root/.kube \
-              bitnami/kubectl:latest \
-              rollout status deployment/my-app -n default --timeout=10s || true)
+            STATUS=$(kubectl rollout status deployment/$DEPLOYMENT_NAME -n $NAMESPACE --timeout=10s || true)
 
             echo "$STATUS"
 
             if [[ "$STATUS" == *"successfully rolled out"* ]]; then
               echo "Deployment is healthy."
               exit 0
+            else
+              echo "Deployment not healthy yet. Retrying in $RETRY_INTERVAL seconds..."
+              sleep $RETRY_INTERVAL
+              RETRIES=$((RETRIES + 1))
             fi
-
-            echo "Not ready yet. Retrying in $RETRY_INTERVAL seconds..."
-            sleep $RETRY_INTERVAL
-            RETRIES=$((RETRIES + 1))
           done
 
           echo "Deployment did not become healthy after $MAX_RETRIES retries."
@@ -171,6 +167,8 @@ jobs:
           REGION=${{ secrets.AWS_REGION }}
           IMAGES_TO_KEEP=5
 
+          echo "Fetching all tagged image details from ECR: $REPO_NAME"
+
           TAGGED_IMAGE_DETAILS=$(aws ecr describe-images \
             --repository-name "$REPO_NAME" \
             --region "$REGION" \
@@ -180,9 +178,11 @@ jobs:
           TAGGED_IMAGE_COUNT=$(echo "$TAGGED_IMAGE_DETAILS" | jq length)
 
           if [ "$TAGGED_IMAGE_COUNT" -le "$IMAGES_TO_KEEP" ]; then
-            echo "Only $TAGGED_IMAGE_COUNT tagged image(s) found — no pruning needed."
+            echo "Only $TAGGED_IMAGE_COUNT tagged image(s) found — no pruning of tagged images needed."
           else
+            echo "Pruning old tagged images..."
             DIGESTS_TO_DELETE=$(echo "$TAGGED_IMAGE_DETAILS" | jq -r ".[0:($TAGGED_IMAGE_COUNT - $IMAGES_TO_KEEP)] | .[].imageDigest")
+
             for DIGEST in $DIGESTS_TO_DELETE; do
               echo "Deleting tagged image digest: $DIGEST"
               aws ecr batch-delete-image \
@@ -191,6 +191,8 @@ jobs:
                 --image-ids imageDigest=$DIGEST
             done
           fi
+
+          echo "Checking for untagged images..."
 
           UNTAGGED_IMAGES=$(aws ecr list-images \
             --repository-name "$REPO_NAME" \
