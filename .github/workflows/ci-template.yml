@@ -135,10 +135,16 @@ jobs:
           name: gitleaks-report
           path: gitleaks-reports/gitleaks-report.json
 
+  gitleaks_noop:
+    if: ${{ !inputs.run_gitleaks }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Skipping Gitleaks scan"
+
   pytest:
     if: ${{ inputs.run_pytest }}
     runs-on: ubuntu-latest
-    needs: [gitleaks_scan]
+    needs: [gitleaks_scan, gitleaks_noop]
     continue-on-error: ${{ inputs.continue_on_pytest_error }}
     steps:
       - uses: actions/checkout@v4
@@ -158,13 +164,14 @@ jobs:
   pytest_noop:
     if: ${{ !inputs.run_pytest }}
     runs-on: ubuntu-latest
+    needs: [gitleaks_scan, gitleaks_noop]
     steps:
       - run: echo "Skipping pytest step"
 
   owasp_scan:
     if: ${{ inputs.run_owasp }}
     runs-on: ubuntu-latest
-    needs: [gitleaks_scan]
+    needs: [gitleaks_scan, gitleaks_noop]
     continue-on-error: ${{ inputs.continue_on_owasp_error }}
     steps:
       - uses: actions/checkout@v4
@@ -183,13 +190,14 @@ jobs:
   owasp_noop:
     if: ${{ !inputs.run_owasp }}
     runs-on: ubuntu-latest
+    needs: [gitleaks_scan, gitleaks_noop]
     steps:
       - run: echo "Skipping OWASP step"
 
   sonarqube_scan:
     if: ${{ inputs.run_sonar }}
     runs-on: ubuntu-latest
-    needs: [owasp_scan]
+    needs: [owasp_scan, owasp_noop]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -213,6 +221,7 @@ jobs:
   sonarqube_noop:
     if: ${{ !inputs.run_sonar }}
     runs-on: ubuntu-latest
+    needs: [owasp_scan, owasp_noop]
     steps:
       - run: echo "Skipping SonarQube step"
 
