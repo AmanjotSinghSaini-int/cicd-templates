@@ -3,10 +3,10 @@ name: Docker Build Reusable Workflow
 on:
   workflow_call:
     inputs:
-      image_name:
+      docker_image_name:
         required: true
         type: string
-      image_tag:
+      docker_image_tag:
         required: false
         type: string
         default: 'latest'
@@ -14,7 +14,7 @@ on:
         required: false
         type: string
         default: './Dockerfile'
-      context:
+      docker_context:
         required: false
         type: string
         default: '.'
@@ -207,14 +207,14 @@ jobs:
             -Dsonar.projectName="${{ inputs.sonar_project_name }}" \
             -Dsonar.host.url=${{ inputs.sonar_host_url }} \
             -Dsonar.login=$SONAR_TOKEN \
-            -Dsonar.projectVersion=${{ inputs.image_tag }}
+            -Dsonar.projectVersion=${{ inputs.docker_image_tag }}
 
 
   docker_build:
     runs-on: ubuntu-latest
     needs: [pytest, owasp_scan, sonarqube_scan]
     outputs:
-      image_name: ${{ inputs.image_name }}
+      docker_image_name: ${{ inputs.docker_image_name }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -223,25 +223,25 @@ jobs:
       - name: Extract image base name
         id: image_vars
         run: |
-          IMAGE_NAME="${{ inputs.image_name }}"
-          BASE_NAME=$(basename "${IMAGE_NAME}" | cut -d':' -f1)
-          TAR_NAME="${BASE_NAME//[^a-zA-Z0-9]/_}_${{ inputs.image_tag }}.tar"
+          DOCKER_IMAGE_NAME="${{ inputs.docker_image_name }}"
+          BASE_NAME=$(basename "${DOCKER_IMAGE_NAME}" | cut -d':' -f1)
+          TAR_NAME="${BASE_NAME//[^a-zA-Z0-9]/_}_${{ inputs.docker_image_tag }}.tar"
           echo "tar_name=$TAR_NAME" >> $GITHUB_OUTPUT
 
       - name: Build Docker image
         run: |
           docker build \
-            -t ${{ inputs.image_name }}:${{ inputs.image_tag }} \
+            -t ${{ inputs.docker_image_name }}:${{ inputs.docker_image_tag }} \
             -f ${{ inputs.dockerfile_path }} \
             ${{ inputs.build_args }} \
-            ${{ inputs.context }}
+            ${{ inputs.docker_context }}
 
       - name: Save Docker image to archive
-        run: docker save -o ${{ steps.image_vars.outputs.tar_name }} ${{ inputs.image_name }}:${{ inputs.image_tag }}
+        run: docker save -o ${{ steps.image_vars.outputs.tar_name }} ${{ inputs.docker_image_name }}:${{ inputs.docker_image_tag }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: built-docker-image-${{ inputs.image_tag }}
+          name: built-docker-image-${{ inputs.docker_image_tag }}
           path: ${{ steps.image_vars.outputs.tar_name }}
 
   trivy_scan:
@@ -252,13 +252,13 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: built-docker-image-${{ inputs.image_tag }}
+          name: built-docker-image-${{ inputs.docker_image_tag }}
 
       - name: Load Docker image
         run: |
-          IMAGE_NAME="${{ inputs.image_name }}"
-          TAG="${{ inputs.image_tag }}"
-          BASE_NAME=$(basename "${IMAGE_NAME}" | cut -d':' -f1)
+          DOCKER_IMAGE_NAME="${{ inputs.docker_image_name }}"
+          TAG="${{ inputs.docker_image_tag }}"
+          BASE_NAME=$(basename "${DOCKER_IMAGE_NAME}" | cut -d':' -f1)
           TAR_NAME="${BASE_NAME//[^a-zA-Z0-9]/_}_${TAG}.tar"
           docker load -i "$TAR_NAME"
 
@@ -269,7 +269,7 @@ jobs:
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v ${{ github.workspace }}/trivy-reports:/output \
             aquasec/trivy:latest \
-            image ${{ inputs.image_name }}:${{ inputs.image_tag }} \
+            image ${{ inputs.docker_image_name }}:${{ inputs.docker_image_tag }} \
             --format table \
             --ignore-unfixed \
             --vuln-type os,library \
@@ -289,19 +289,19 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: built-docker-image-${{ inputs.image_tag }}
+          name: built-docker-image-${{ inputs.docker_image_tag }}
 
       - name: Load Docker image
         run: |
-          IMAGE_NAME="${{ inputs.image_name }}"
-          TAG="${{ inputs.image_tag }}"
-          BASE_NAME=$(basename "${IMAGE_NAME}" | cut -d':' -f1)
+          DOCKER_IMAGE_NAME="${{ inputs.docker_image_name }}"
+          TAG="${{ inputs.docker_image_tag }}"
+          BASE_NAME=$(basename "${DOCKER_IMAGE_NAME}" | cut -d':' -f1)
           TAR_NAME="${BASE_NAME//[^a-zA-Z0-9]/_}_${TAG}.tar"
           docker load -i "$TAR_NAME"
 
       - id: check_size
         run: |
-          IMAGE_SIZE=$(docker image inspect "${{ inputs.image_name }}:${{ inputs.image_tag }}" --format='{{.Size}}')
+          IMAGE_SIZE=$(docker image inspect "${{ inputs.docker_image_name }}:${{ inputs.docker_image_tag }}" --format='{{.Size}}')
           SIZE_MB=$((IMAGE_SIZE / 1024 / 1024))
           THRESHOLD=${{ inputs.image_size_threshold_mb }}
           echo "Image size is ${SIZE_MB} MB (Threshold: ${THRESHOLD} MB)"
@@ -333,13 +333,13 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: built-docker-image-${{ inputs.image_tag }}
+          name: built-docker-image-${{ inputs.docker_image_tag }}
 
       - name: Load Docker image
         run: |
-          IMAGE_NAME="${{ inputs.image_name }}"
-          TAG="${{ inputs.image_tag }}"
-          BASE_NAME=$(basename "${IMAGE_NAME}" | cut -d':' -f1)
+          DOCKER_IMAGE_NAME="${{ inputs.docker_image_name }}"
+          TAG="${{ inputs.docker_image_tag }}"
+          BASE_NAME=$(basename "${DOCKER_IMAGE_NAME}" | cut -d':' -f1)
           TAR_NAME="${BASE_NAME//[^a-zA-Z0-9]/_}_${TAG}.tar"
           docker load -i "$TAR_NAME"
 
@@ -350,8 +350,8 @@ jobs:
 
       - name: Tag image for AWS ECR
         run: |
-          ECR_IMAGE="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${{ inputs.ecr_repository }}:${{ inputs.image_tag }}"
-          docker tag ${{ inputs.image_name }}:${{ inputs.image_tag }} $ECR_IMAGE
+          ECR_IMAGE="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${{ inputs.ecr_repository }}:${{ inputs.docker_image_tag }}"
+          docker tag ${{ inputs.docker_image_name }}:${{ inputs.docker_image_tag }} $ECR_IMAGE
           echo "ECR_IMAGE=$ECR_IMAGE" >> $GITHUB_ENV
 
       - name: Push to AWS ECR
