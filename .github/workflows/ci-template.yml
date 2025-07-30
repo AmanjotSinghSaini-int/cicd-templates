@@ -141,6 +141,7 @@ jobs:
   pytest:
     if: ${{ inputs.run_pytest }}
     runs-on: ubuntu-latest
+    needs: [gitleaks_scan]
     continue-on-error: ${{ inputs.continue_on_pytest_error }}
     steps:
       - uses: actions/checkout@v4
@@ -163,6 +164,7 @@ jobs:
 
   owasp_scan:
     runs-on: ubuntu-latest
+    needs: [gitleaks_scan]
     if: ${{ inputs.run_owasp }}
     continue-on-error: ${{ inputs.continue_on_owasp_error }}
     steps:
@@ -183,6 +185,7 @@ jobs:
 
   sonarqube_scan:
     runs-on: ubuntu-latest
+    needs: [owasp_scan]
     if: ${{ inputs.run_sonar }}
     steps:
       - uses: actions/checkout@v4
@@ -209,6 +212,7 @@ jobs:
 
   docker_build:
     runs-on: ubuntu-latest
+    needs: [pytest, owasp_scan, sonarqube_scan]
     outputs:
       docker_image_name: ${{ inputs.docker_image_name }}
     steps:
@@ -243,6 +247,7 @@ jobs:
   trivy_scan:
     if: ${{ inputs.run_trivy }}
     runs-on: ubuntu-latest
+    needs: docker_build
     continue-on-error: ${{ inputs.continue_on_trivy_error }}
     steps:
       - uses: actions/download-artifact@v4
@@ -277,6 +282,7 @@ jobs:
 
   docker_image_size_check:
     runs-on: ubuntu-latest
+    needs: [docker_build]
     outputs:
       pass_size_check: ${{ steps.check_size.outputs.pass_size_check }}
     continue-on-error: ${{ inputs.continue_on_size_check_error }}
@@ -310,6 +316,7 @@ jobs:
 
   push_to_ecr:
     runs-on: ubuntu-latest
+    needs: [trivy_scan, docker_image_size_check]
     if: >
       ${{
         inputs.push_to_ecr &&
@@ -352,6 +359,7 @@ jobs:
 
   slack_notify:
     runs-on: ubuntu-latest
+    needs: [push_to_ecr]
     if: always()
 
     steps:
